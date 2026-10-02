@@ -1,0 +1,724 @@
+(function () {
+  "use strict";
+
+  const CONFIG = repoConfig();
+  const API = "https://api.github.com/repos/" + CONFIG.owner + "/" + CONFIG.repo + "/contents/data.json";
+  const TOKEN_HELP = "https://github.com/settings/personal-access-tokens/new";
+  const TOKEN_KEY = "wishlist-token";
+  const TABS = [["all", "Все"], ["want", "Хочу"], ["gifted", "Подарено"], ["gone", "Не работают"]];
+  const PLATFORMS = [
+    [/(^|\.)ozon\.(ru|by|kz)$/, "Ozon"],
+    [/(^|\.)(wildberries\.(ru|by|kz|am|uz)|wb\.ru)$/, "Wildberries"],
+    [/(^|\.)market\.yandex\.(ru|by|kz)$/, "Яндекс Маркет"],
+    [/(^|\.)aliexpress\.(ru|com|us)$/, "AliExpress"],
+    [/(^|\.)avito\.ru$/, "Авито"],
+    [/(^|\.)megamarket\.ru$/, "Мегамаркет"],
+    [/(^|\.)lamoda\.(ru|by|kz)$/, "Lamoda"],
+    [/(^|\.)dns-shop\.(ru|kz)$/, "DNS"],
+    [/(^|\.)mvideo\.ru$/, "М.Видео"],
+    [/(^|\.)eldorado\.ru$/, "Эльдорадо"],
+    [/(^|\.)citilink\.ru$/, "Ситилинк"],
+    [/(^|\.)goldapple\.(ru|by|kz)$/, "Золотое Яблоко"],
+    [/(^|\.)letu\.ru$/, "Летуаль"],
+    [/(^|\.)labirint\.ru$/, "Лабиринт"],
+    [/(^|\.)chitai-gorod\.ru$/, "Читай-город"],
+    [/(^|\.)litres\.ru$/, "Литрес"],
+    [/(^|\.)detmir\.ru$/, "Детский мир"],
+    [/(^|\.)sportmaster\.ru$/, "Спортмастер"],
+    [/(^|\.)amazon\.[a-z.]+$/, "Amazon"],
+    [/(^|\.)ebay\.[a-z.]+$/, "eBay"],
+    [/(^|\.)store\.steampowered\.com$/, "Steam"],
+    [/(^|\.)apple\.com$/, "Apple"]
+  ];
+  const EXAMPLES = [
+    { id: "x1", title: "Наушники Sony WH-1000XM5", url: "", platform: "Ozon", price: 32990, note: "чёрные", gifted: false, check: null },
+    { id: "x2", title: "«Мастер и Маргарита», иллюстрированное издание", url: "", platform: "Лабиринт", price: 1450, note: "", gifted: false, check: { status: "gone", at: null, note: "Товар закончился" } },
+    { id: "x3", title: "Термокружка Stanley, 470 мл", url: "", platform: "Wildberries", price: 3200, note: "", gifted: true, check: null }
+  ];
+
+  const app = document.getElementById("app");
+  const toastEl = el("div", { class: "toast", role: "status", "aria-live": "polite", hidden: true });
+  document.body.append(toastEl);
+
+  let state = normalize({});
+  let loaded = false;
+  let loadFailed = false;
+  let token = readToken();
+  let sha = null;
+  let canEdit = false;
+  let editing = null;
+  let renaming = false;
+  let loggingIn = false;
+  let busy = false;
+  let saveTimer = null;
+  let toastTimer = null;
+  let filter = loadFilter();
+
+  render();
+  boot();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && saveTimer) save();
+  });
+
+  /** Загружает список: владельцу свежий из GitHub, остальным с сайта. */
+  async function boot() {
+    if (token) {
+      try {
+        await loadRemote();
+        canEdit = true;
+      } catch (e) {
+        if (e.status === 401) {
+          dropToken();
+          showToast("Токен больше не действует. Войди заново", 6000);
+        }
+      }
+    }
+    if (!canEdit) {
+      try {
+        await loadPublic();
+      } catch (e) {
+        loadFailed = true;
+      }
+    }
+    loaded = true;
+    render();
+  }
+
+  /** Читает data.json, опубликованный на сайте. */
+  async function loadPublic() {
+    const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw httpError(r);
+    state = normalize(await r.json());
+  }
+
+  /** Читает data.json напрямую из репозитория вместе с его версией. */
+  async function loadRemote() {
+    const r = await gh("GET", API + "?ref=" + encodeURIComponent(CONFIG.branch));
+    if (!r.ok) throw httpError(r);
+    const j = await r.json();
+    state = normalize(JSON.parse(fromB64(j.content)));
+    sha = j.sha;
+  }
+
+  /** Сохраняет список коммитом в репозиторий. */
+  async function save(isRetry) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (!canEdit || !token) return;
+    if (busy) {
+      saveTimer = setTimeout(save, 600);
+      return;
+    }
+    busy = true;
+    const retry = { label: "Сохранить", fn: () => save() };
+    showToast("Сохраняю…");
+    try {
+      const r = await gh("PUT", API, { message: "Обновление вишлиста", content: toB64(serialize(state)), sha: sha || undefined, branch: CONFIG.branch });
+      if (r.ok) {
+        sha = (await r.json()).content.sha;
+        showToast("Сохранено. У друзей обновится примерно через минуту", 3500);
+      } else if ((r.status === 409 || r.status === 422) && !isRetry) {
+        await mergeRemote();
+        if (editing === null && !renaming) render();
+        busy = false;
+        await save(true);
+        return;
+      } else if (r.status === 401) {
+        dropToken();
+        canEdit = false;
+        editing = null;
+        render();
+        showToast("Токен больше не действует. Войди заново", 0, { label: "Войти", fn: openLogin });
+      } else if (r.status === 403 || r.status === 404) {
+        showToast("У токена нет права записи. Нужен доступ Contents: Read and write к репозиторию " + CONFIG.repo, 0, retry);
+      } else {
+        showToast("Не получилось сохранить, ошибка GitHub " + r.status, 0, retry);
+      }
+    } catch (e) {
+      showToast("Не получилось сохранить. Проверь интернет", 0, retry);
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** Подтягивает свежие результаты проверки ссылок поверх локальных правок. */
+  async function mergeRemote() {
+    const local = state;
+    await loadRemote();
+    const remote = new Map(state.items.map((i) => [i.id, i]));
+    local.items.forEach((i) => {
+      const r = remote.get(i.id);
+      if (r && r.url === i.url) i.check = r.check;
+    });
+    local.checkedAt = state.checkedAt || local.checkedAt;
+    state = local;
+  }
+
+  /** Откладывает сохранение, чтобы собрать несколько отметок в один коммит. */
+  function queueSave(delay) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, delay);
+  }
+
+  /** Запрос к GitHub API с токеном владельца. */
+  function gh(method, url, body) {
+    const headers = { Accept: "application/vnd.github+json", Authorization: "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28" };
+    if (body) headers["Content-Type"] = "application/json";
+    return fetch(url, { method: method, cache: "no-store", headers: headers, body: body ? JSON.stringify(body) : undefined });
+  }
+
+  /** Ошибка с HTTP-статусом ответа. */
+  function httpError(r) {
+    const e = new Error("HTTP " + r.status);
+    e.status = r.status;
+    return e;
+  }
+
+  /** Владелец и репозиторий по адресу страницы. */
+  function repoConfig() {
+    const host = location.hostname.match(/^([a-z0-9-]+)\.github\.io$/i);
+    const seg = location.pathname.split("/").filter(Boolean)[0];
+    if (host && seg && !/\.html?$/i.test(seg)) return { owner: host[1], repo: seg, branch: "main" };
+    return { owner: "Narlemix", repo: "wishlist", branch: "main" };
+  }
+
+  /** Приводит данные к ожидаемой форме. */
+  function normalize(raw) {
+    const s = raw && typeof raw === "object" ? raw : {};
+    const items = Array.isArray(s.items) ? s.items : [];
+    return {
+      title: typeof s.title === "string" && s.title.trim() ? s.title.trim().slice(0, 80) : "Мой вишлист",
+      checkedAt: typeof s.checkedAt === "string" ? s.checkedAt : null,
+      items: items.filter((i) => i && i.id && i.title).map((i) => ({
+        id: String(i.id),
+        title: String(i.title).slice(0, 140),
+        url: cleanUrl(i.url),
+        platform: String(i.platform || "").slice(0, 40),
+        price: typeof i.price === "number" && isFinite(i.price) ? i.price : null,
+        note: String(i.note || "").slice(0, 200),
+        gifted: !!i.gifted,
+        giftedAt: typeof i.giftedAt === "string" ? i.giftedAt : null,
+        addedAt: typeof i.addedAt === "string" ? i.addedAt : null,
+        check: i.check && ["ok", "gone", "unknown"].includes(i.check.status)
+          ? { status: i.check.status, at: typeof i.check.at === "string" ? i.check.at : null, note: String(i.check.note || "").slice(0, 120) }
+          : null
+      }))
+    };
+  }
+
+  /** Перерисовывает страницу целиком. */
+  function render() {
+    document.title = loaded ? state.title : "Вишлист";
+    let tabsNode = null;
+    let listNode;
+    if (!loaded) {
+      listNode = el("p", { class: "empty-filter" }, "Загружаю список…");
+    } else if (loadFailed) {
+      listNode = el("p", { class: "empty-filter" }, "Не получилось загрузить список. Обнови страницу через минуту.");
+    } else if (state.items.length) {
+      tabsNode = tabs();
+      const items = visibleItems();
+      listNode = items.length
+        ? el("ul", { class: "list" }, items.map((i) => row(i, false)))
+        : el("p", { class: "empty-filter" }, "В этом разделе пусто");
+    } else {
+      listNode = editing === "new" ? null : emptyState();
+    }
+    app.replaceChildren(...[
+      header(),
+      loggingIn && !canEdit ? loginPanel() : null,
+      editing === "new" ? form(null) : null,
+      tabsNode,
+      listNode,
+      loaded ? footer() : null
+    ].filter(Boolean));
+  }
+
+  /** Шапка: название списка, сводка и кнопка добавления. */
+  function header() {
+    return el("header", { class: "head" },
+      el("div", { class: "head-text" }, titleNode(), el("p", { class: "summary" }, loaded ? summaryText() : " ")),
+      canEdit && editing !== "new"
+        ? el("button", { type: "button", class: "btn", onclick: () => openForm("new") }, "Добавить")
+        : null);
+  }
+
+  /** Заголовок, который владелец может переименовать. */
+  function titleNode() {
+    if (!loaded) return el("h1", { class: "h1" }, " ");
+    if (canEdit && renaming) {
+      const inp = el("input", { id: "f-name", class: "rename", type: "text", maxlength: "80", "aria-label": "Название списка" });
+      inp.value = state.title;
+      const finish = (commit) => {
+        if (!renaming) return;
+        renaming = false;
+        const v = inp.value.trim();
+        if (commit && v && v !== state.title) {
+          state.title = v;
+          render();
+          save();
+        } else {
+          render();
+        }
+      };
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); finish(true); }
+        if (e.key === "Escape") finish(false);
+      });
+      inp.addEventListener("blur", () => finish(true));
+      focusLater(inp, true);
+      return el("h1", { class: "h1" }, inp);
+    }
+    if (canEdit) {
+      return el("h1", { class: "h1" },
+        el("button", { type: "button", class: "h1-btn", title: "Переименовать", onclick: () => { renaming = true; editing = null; render(); } }, state.title));
+    }
+    return el("h1", { class: "h1" }, state.title);
+  }
+
+  /** Строка сводки под заголовком. */
+  function summaryText() {
+    const all = state.items.length;
+    if (!all) return "Пока пусто";
+    const gifted = state.items.filter((i) => i.gifted).length;
+    const rest = state.items.filter((i) => !i.gifted && i.price != null).reduce((a, i) => a + i.price, 0);
+    const parts = [all + " " + plural(all, ["желание", "желания", "желаний"])];
+    if (gifted) parts.push("подарено " + gifted);
+    if (rest) parts.push((gifted ? "осталось на " : "на ") + fmtPrice(rest));
+    return parts.join(" · ");
+  }
+
+  /** Вкладки-фильтры с количеством. */
+  function tabs() {
+    const counts = {
+      all: state.items.length,
+      want: state.items.filter((i) => !i.gifted).length,
+      gifted: state.items.filter((i) => i.gifted).length,
+      gone: state.items.filter(isGone).length
+    };
+    if (filter === "gone" && !counts.gone) filter = "all";
+    return el("div", { class: "tabs", role: "tablist", "aria-label": "Фильтр списка" },
+      TABS.filter(([k]) => k !== "gone" || counts.gone).map(([k, label]) =>
+        el("button", {
+          type: "button",
+          role: "tab",
+          class: "tab" + (k === "gone" ? " tab-gone" : ""),
+          "aria-selected": filter === k ? "true" : "false",
+          onclick: () => { filter = k; storeFilter(); render(); }
+        }, label, el("span", { class: "n" }, String(counts[k])))));
+  }
+
+  /** Товары текущего фильтра: сначала желанные, подаренные в конце. */
+  function visibleItems() {
+    return state.items
+      .slice()
+      .sort((a, b) => (a.gifted !== b.gifted ? (a.gifted ? 1 : -1) : String(b.addedAt || "").localeCompare(String(a.addedAt || ""))))
+      .filter((i) => filter === "all" || (filter === "want" && !i.gifted) || (filter === "gifted" && i.gifted) || (filter === "gone" && isGone(i)));
+  }
+
+  /** Одна строка списка. */
+  function row(item, preview) {
+    if (!preview && editing === item.id) return el("li", { class: "item is-editing" }, form(item));
+    const interactive = canEdit && !preview;
+    const platform = item.platform || detectPlatform(item.url);
+    const gift = el("button", {
+      type: "button",
+      class: "gift",
+      "aria-pressed": item.gifted ? "true" : "false",
+      "aria-label": item.gifted ? "Подарено, снять отметку" : "Отметить как подаренное",
+      title: interactive ? (item.gifted ? "Снять отметку" : "Отметить как подаренное") : (item.gifted ? "Подарено" : null),
+      disabled: !interactive,
+      onclick: () => toggleGift(item.id)
+    });
+    const name = item.url
+      ? el("a", { class: "name", href: item.url, target: "_blank", rel: "noopener noreferrer" }, item.title)
+      : el("span", { class: "name" }, item.title);
+    const meta = el("div", { class: "meta" },
+      platform ? el("span", { class: "platform" }, platform) : null,
+      item.gifted ? el("span", { class: "mark gifted" }, "Подарено") : statusMark(item, preview),
+      item.note ? el("span", { class: "note" }, item.note) : null);
+    return el("li", { class: "item" + (item.gifted ? " is-gifted" : "") + (isGone(item) ? " is-gone" : "") },
+      gift,
+      el("div", { class: "body" }, name, meta),
+      el("div", { class: "side" },
+        el("span", { class: "price" }, item.price != null ? fmtPrice(item.price) : ""),
+        interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null));
+  }
+
+  /** Пометка о результате проверки ссылки. */
+  function statusMark(item, preview) {
+    const c = item.check;
+    if (!c) return null;
+    if (c.status === "gone") {
+      return el("span", { class: "mark gone", title: c.at ? "Проверено " + fmtDate(c.at, true) : null }, c.note || "Ссылка не работает");
+    }
+    if (c.status === "unknown" && canEdit && !preview) {
+      return el("span", { class: "mark unknown", title: c.note || null }, "не удалось проверить");
+    }
+    return null;
+  }
+
+  /** Пустое состояние с примером того, как выглядит список. */
+  function emptyState() {
+    if (!canEdit) return el("div", { class: "empty" }, el("p", { class: "empty-title" }, "Здесь пока ничего нет"));
+    return el("div", { class: "empty" },
+      el("p", { class: "empty-title" }, "Список пока пуст"),
+      el("p", { class: "empty-text" }, "Нажми «Добавить» и вставь ссылку на товар. Площадка определится по ссылке, цену и заметку можно указать по желанию."),
+      el("p", { class: "eyebrow" }, "Пример"),
+      el("ul", { class: "list ghost", "aria-hidden": "true" }, EXAMPLES.map((i) => row(i, true))));
+  }
+
+  /** Подвал: время проверки ссылок и вход для владельца. */
+  function footer() {
+    const last = state.checkedAt
+      ? "Последняя проверка: " + fmtDate(state.checkedAt, true) + "."
+      : "Первой проверки ещё не было.";
+    let action = null;
+    if (canEdit) action = el("button", { type: "button", class: "foot-btn", onclick: logout }, "Выйти из режима редактирования");
+    else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Вход для владельца");
+    return el("footer", { class: "foot" },
+      el("p", null, "Ссылки проверяются автоматически раз в день. " + last),
+      action ? el("p", { class: "foot-actions" }, action) : null);
+  }
+
+  /** Форма входа по токену GitHub. */
+  function loginPanel() {
+    const f = field("f-token", "Токен GitHub", "", "github_pat_…", { type: "password", autocomplete: "off", spellcheck: "false" });
+    const submit = el("button", { type: "submit", class: "btn" }, "Войти");
+    const node = el("form", { class: "form", novalidate: true, "aria-label": "Вход для владельца" },
+      el("div", { class: "form-head" },
+        el("p", { class: "form-title" }, "Вход для владельца"),
+        el("p", { class: "form-text" }, "Вставь токен GitHub с доступом к репозиторию ", el("b", null, CONFIG.owner + "/" + CONFIG.repo),
+          " и правом Contents: Read and write. Токен хранится только в этом браузере.")),
+      f.wrap,
+      el("div", { class: "actions" },
+        submit,
+        el("button", { type: "button", class: "btn ghost", onclick: () => { loggingIn = false; render(); } }, "Отмена"),
+        el("a", { class: "help-link", href: TOKEN_HELP, target: "_blank", rel: "noopener noreferrer" }, "Создать токен")));
+    node.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const t = f.input.value.trim();
+      if (!t) {
+        setErr(f, "Вставь токен");
+        return;
+      }
+      submit.disabled = true;
+      token = t;
+      try {
+        await loadRemote();
+        storeToken(t);
+        canEdit = true;
+        loggingIn = false;
+        loadFailed = false;
+        render();
+        showToast("Готово, можно редактировать", 2500);
+      } catch (err) {
+        token = null;
+        submit.disabled = false;
+        setErr(f, err.status === 401 ? "GitHub не принял токен. Проверь, что он скопирован целиком"
+          : err.status === 404 ? "Токен не видит репозиторий " + CONFIG.owner + "/" + CONFIG.repo
+          : "Не получилось проверить токен. Проверь интернет");
+      }
+    });
+    focusLater(f.input);
+    return node;
+  }
+
+  /** Открывает форму входа. */
+  function openLogin() {
+    loggingIn = true;
+    editing = null;
+    render();
+  }
+
+  /** Выходит из режима редактирования на этом устройстве. */
+  function logout() {
+    if (saveTimer) save();
+    dropToken();
+    canEdit = false;
+    editing = null;
+    renaming = false;
+    sha = null;
+    render();
+  }
+
+  /** Форма добавления или изменения товара. */
+  function form(item) {
+    const isNew = !item;
+    const v = item || {};
+    const f = {
+      url: field("f-url", "Ссылка", v.url || "", "https://www.ozon.ru/product/…", { inputmode: "url", autocomplete: "off", spellcheck: "false" }),
+      title: field("f-title", "Название", v.title || "", "Что хочется получить", { maxlength: "140" }),
+      price: field("f-price", "Цена, ₽", v.price != null ? String(v.price) : "", "Необязательно", { inputmode: "decimal", autocomplete: "off" }),
+      platform: field("f-platform", "Площадка", v.platform || "", detectPlatform(v.url) || "Определится по ссылке", { maxlength: "40" }),
+      note: field("f-note", "Заметка", v.note || "", "Размер, цвет, модель", { maxlength: "200" })
+    };
+    f.url.input.addEventListener("input", () => {
+      f.platform.input.placeholder = detectPlatform(cleanUrl(f.url.input.value)) || "Определится по ссылке";
+    });
+    const actions = el("div", { class: "actions" },
+      el("button", { type: "submit", class: "btn" }, isNew ? "Добавить в список" : "Сохранить"),
+      el("button", { type: "button", class: "btn ghost", onclick: closeForm }, "Отмена"));
+    if (!isNew) {
+      const del = el("div", { class: "delete" });
+      const idle = () => del.replaceChildren(el("button", { type: "button", class: "btn text", onclick: ask }, "Удалить"));
+      const ask = () => del.replaceChildren(
+        el("span", { class: "delete-q" }, "Удалить насовсем?"),
+        el("button", { type: "button", class: "btn danger", onclick: () => removeItem(item.id) }, "Да, удалить"),
+        el("button", { type: "button", class: "btn ghost", onclick: idle }, "Нет"));
+      idle();
+      actions.append(del);
+    }
+    const node = el("form", { class: "form", novalidate: true, "aria-label": isNew ? "Новое желание" : "Изменить желание" },
+      f.url.wrap, f.title.wrap, el("div", { class: "row2" }, f.price.wrap, f.platform.wrap), f.note.wrap, actions);
+    node.addEventListener("submit", (e) => { e.preventDefault(); submitForm(item, f); });
+    node.addEventListener("keydown", (e) => { if (e.key === "Escape") closeForm(); });
+    focusLater(isNew ? f.url.input : f.title.input);
+    return node;
+  }
+
+  /** Поле формы с подписью и местом для ошибки. */
+  function field(id, label, value, placeholder, extra) {
+    const input = el("input", Object.assign({ id: id, name: id, type: "text", placeholder: placeholder, "aria-describedby": id + "-err" }, extra || {}));
+    input.value = value;
+    const err = el("p", { class: "err", id: id + "-err", hidden: true });
+    return { input: input, err: err, wrap: el("div", { class: "field" }, el("label", { for: id }, label), input, err) };
+  }
+
+  /** Показывает или скрывает ошибку поля. */
+  function setErr(f, msg) {
+    f.err.textContent = msg;
+    f.err.hidden = !msg;
+    f.input.setAttribute("aria-invalid", msg ? "true" : "false");
+  }
+
+  /** Проверяет форму и сохраняет товар. */
+  function submitForm(item, f) {
+    const title = f.title.input.value.trim();
+    const rawUrl = f.url.input.value.trim();
+    const url = rawUrl ? cleanUrl(rawUrl) : "";
+    const rawPrice = f.price.input.value.trim();
+    const price = rawPrice ? parsePrice(rawPrice) : null;
+    setErr(f.url, rawUrl && !url ? "Нужна ссылка на страницу товара, например https://www.ozon.ru/product/…" : "");
+    setErr(f.title, title ? "" : "Напиши, что это за подарок");
+    setErr(f.price, rawPrice && price == null ? "Укажи цену числом, например 4990" : "");
+    const bad = ["url", "title", "price"].map((k) => f[k]).find((x) => !x.err.hidden);
+    if (bad) {
+      bad.input.focus();
+      return;
+    }
+    const data = { title: title, url: url, price: price, platform: f.platform.input.value.trim(), note: f.note.input.value.trim() };
+    if (item) {
+      const it = state.items.find((i) => i.id === item.id);
+      if (!it) return closeForm();
+      if (it.url !== data.url) it.check = null;
+      Object.assign(it, data);
+    } else {
+      state.items.push(Object.assign({ id: newId(), gifted: false, giftedAt: null, addedAt: new Date().toISOString(), check: null }, data));
+      if (filter === "gifted" || filter === "gone") {
+        filter = "all";
+        storeFilter();
+      }
+    }
+    editing = null;
+    render();
+    save();
+  }
+
+  /** Открывает форму нового или существующего товара. */
+  function openForm(id) {
+    editing = id;
+    renaming = false;
+    render();
+  }
+
+  /** Закрывает форму без сохранения. */
+  function closeForm() {
+    editing = null;
+    render();
+  }
+
+  /** Удаляет товар. */
+  function removeItem(id) {
+    state.items = state.items.filter((i) => i.id !== id);
+    editing = null;
+    render();
+    save();
+  }
+
+  /** Ставит или снимает отметку «подарено». */
+  function toggleGift(id) {
+    const it = state.items.find((i) => i.id === id);
+    if (!it || !canEdit) return;
+    it.gifted = !it.gifted;
+    it.giftedAt = it.gifted ? new Date().toISOString() : null;
+    render();
+    queueSave(1500);
+  }
+
+  /** Всплывающее сообщение внизу экрана. */
+  function showToast(text, ms, action) {
+    clearTimeout(toastTimer);
+    toastEl.replaceChildren(...[
+      el("span", null, text),
+      action ? el("button", { type: "button", onclick: () => { toastEl.hidden = true; action.fn(); } }, action.label) : null
+    ].filter(Boolean));
+    toastEl.hidden = false;
+    if (ms) toastTimer = setTimeout(() => { toastEl.hidden = true; }, ms);
+  }
+
+  /** Определяет площадку по адресу ссылки. */
+  function detectPlatform(url) {
+    if (!url) return "";
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      const hit = PLATFORMS.find(([re]) => re.test(host));
+      return hit ? hit[1] : host;
+    } catch (e) {
+      return "";
+    }
+  }
+
+  /** Достаёт ссылку из вставленного текста и проверяет её. */
+  function cleanUrl(raw) {
+    let s = String(raw || "").trim();
+    if (!s) return "";
+    const found = s.match(/https?:\/\/[^\s<>"']+/i);
+    if (found) s = found[0];
+    else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = "https://" + s.replace(/^\/+/, "");
+    try {
+      const u = new URL(s);
+      if ((u.protocol === "http:" || u.protocol === "https:") && u.hostname.includes(".")) return u.href;
+    } catch (e) {}
+    return "";
+  }
+
+  /** Разбирает цену из строки вида «12 990 ₽». */
+  function parsePrice(s) {
+    const n = Number(String(s).replace(/[\s  ₽]|руб\.?|р\.?$/gi, "").replace(",", "."));
+    return isFinite(n) && n >= 0 && n < 1e9 ? Math.round(n * 100) / 100 : null;
+  }
+
+  /** Форматирует цену в рублях. */
+  function fmtPrice(n) {
+    return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(n) + " ₽";
+  }
+
+  /** Форматирует дату по-русски. */
+  function fmtDate(iso, withTime) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const opts = { day: "numeric", month: "long" };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    if (withTime) {
+      opts.hour = "2-digit";
+      opts.minute = "2-digit";
+    }
+    return d.toLocaleString("ru-RU", opts);
+  }
+
+  /** Склонение по числу. */
+  function plural(n, forms) {
+    const a = Math.abs(n) % 100;
+    const b = a % 10;
+    if (a > 10 && a < 20) return forms[2];
+    if (b > 1 && b < 5) return forms[1];
+    if (b === 1) return forms[0];
+    return forms[2];
+  }
+
+  /** Товар с неработающей ссылкой, который ещё не подарили. */
+  function isGone(i) {
+    return !i.gifted && !!i.check && i.check.status === "gone";
+  }
+
+  /** Новый идентификатор товара. */
+  function newId() {
+    return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /** Данные в том виде, в каком они лежат в data.json. */
+  function serialize(s) {
+    return JSON.stringify(s, null, 2) + "\n";
+  }
+
+  /** Кодирует строку UTF-8 в base64. */
+  function toB64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  /** Декодирует base64 в строку UTF-8. */
+  function fromB64(b64) {
+    const bin = atob(String(b64).replace(/\s/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  /** Ставит фокус после отрисовки. */
+  function focusLater(node, select) {
+    requestAnimationFrame(() => {
+      node.focus();
+      if (select) node.select();
+    });
+  }
+
+  /** Токен владельца из памяти браузера. */
+  function readToken() {
+    try {
+      return localStorage.getItem(TOKEN_KEY) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Запоминает токен в этом браузере. */
+  function storeToken(t) {
+    try {
+      localStorage.setItem(TOKEN_KEY, t);
+    } catch (e) {}
+  }
+
+  /** Забывает токен в этом браузере. */
+  function dropToken() {
+    token = null;
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch (e) {}
+  }
+
+  /** Восстанавливает выбранную вкладку. */
+  function loadFilter() {
+    try {
+      const v = localStorage.getItem("wishlist-filter");
+      return TABS.some(([k]) => k === v) ? v : "all";
+    } catch (e) {
+      return "all";
+    }
+  }
+
+  /** Запоминает выбранную вкладку. */
+  function storeFilter() {
+    try {
+      localStorage.setItem("wishlist-filter", filter);
+    } catch (e) {}
+  }
+
+  /** Создаёт DOM-элемент с атрибутами и детьми. */
+  function el(tag, attrs) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.slice(2), v);
+      else if (k === "class") n.className = v;
+      else n.setAttribute(k, v === true ? "" : String(v));
+    }
+    for (const c of Array.prototype.slice.call(arguments, 2).flat(Infinity)) {
+      if (c != null && c !== false) n.append(c instanceof Node ? c : String(c));
+    }
+    return n;
+  }
+})();
