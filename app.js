@@ -609,6 +609,9 @@
       + "if(!p)p=t(q('meta[itemprop=price],meta[property=\"product:price:amount\"],meta[property=\"og:price:amount\"]'));"
       + "if(!p){const e=q('[data-widget=webPrice],.price-block__final-price,[data-auto=snippet-price-current],[data-auto=price-value]');"
       + "if(e)p=((e.textContent||'').match(/\\d[\\d\\s\\u00a0\\u2009\\u202f]*/)||[''])[0]}"
+      + "if(!p){let b=0;for(const e of d.querySelectorAll('[class*=rice]')){const x=(e.textContent||'').trim();"
+      + "if(x.length<40&&/\\d/.test(x)&&/₽|руб/.test(x)){const z=parseFloat(getComputedStyle(e).fontSize)||0;"
+      + "if(z>b){b=z;p=(x.match(/\\d[\\d\\s\\u00a0\\u2009\\u202f]*/)||[''])[0]}}}}"
       + "n=n||t(q('meta[property=\"og:title\"]'))||t(q('h1'))||d.title;"
       + "p=p.replace(/[^\\d.,]/g,'').replace(',','.');"
       + "window.open('" + base + "?add=1&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(n.slice(0,140))+'&price='+encodeURIComponent(p),'_blank')})()";
