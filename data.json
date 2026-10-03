@@ -17,7 +17,11 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T00:25:47.333Z",
-      "check": null
+      "check": {
+        "status": "unknown",
+        "at": "2026-10-03T06:43:32Z",
+        "note": "Ozon заблокирован, браузер недоступен"
+      }
     },
     {
       "id": "wmurnitshzs9h",
@@ -34,7 +38,11 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T00:26:16.529Z",
-      "check": null
+      "check": {
+        "status": "unknown",
+        "at": "2026-10-03T06:43:32Z",
+        "note": "Ozon заблокирован, браузер недоступен"
+      }
     },
     {
       "id": "wmurnjhn0xyyl",
@@ -51,7 +59,11 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T00:26:47.436Z",
-      "check": null
+      "check": {
+        "status": "unknown",
+        "at": "2026-10-03T06:43:32Z",
+        "note": "Ozon заблокирован, браузер недоступен"
+      }
     }
   ]
 }
