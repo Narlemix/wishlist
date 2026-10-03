@@ -5,7 +5,9 @@
   const API = "https://api.github.com/repos/" + CONFIG.owner + "/" + CONFIG.repo + "/contents/data.json";
   const TOKEN_HELP = "https://github.com/settings/personal-access-tokens/new";
   const TOKEN_KEY = "wishlist-token";
-  const TABS = [["all", "Все"], ["want", "Хочу"], ["gifted", "Подарено"], ["gone", "Не работают"]];
+  const TABS = [["all", "Все"], ["want", "Ждут подарка"], ["gifted", "Подарено"], ["gone", "Не работают"]];
+  const PRIORITIES = [[1, "Очень нужно"], [2, "Нужно"], [3, "Хочу"], [4, "Было бы приятно"], [5, "Когда-нибудь"]];
+  const DEFAULT_PRIORITY = 3;
   const PLATFORMS = [
     [/(^|\.)ozon\.(ru|by|kz)$/, "Ozon"],
     [/(^|\.)(wildberries\.(ru|by|kz|am|uz)|wb\.ru)$/, "Wildberries"],
@@ -31,9 +33,9 @@
     [/(^|\.)apple\.com$/, "Apple"]
   ];
   const EXAMPLES = [
-    { id: "x1", title: "Наушники Sony WH-1000XM5", url: "", platform: "Ozon", price: 32990, note: "чёрные", gifted: false, check: null },
-    { id: "x2", title: "«Мастер и Маргарита», иллюстрированное издание", url: "", platform: "Лабиринт", price: 1450, note: "", gifted: false, check: { status: "gone", at: null, note: "Товар закончился" } },
-    { id: "x3", title: "Термокружка Stanley, 470 мл", url: "", platform: "Wildberries", price: 3200, note: "", gifted: true, check: null }
+    { id: "x1", title: "Наушники Sony WH-1000XM5", url: "", platform: "Ozon", price: 32990, note: "чёрные", priority: 1, gifted: false, check: null },
+    { id: "x2", title: "«Мастер и Маргарита», иллюстрированное издание", url: "", platform: "Лабиринт", price: 1450, note: "", priority: 4, gifted: false, check: { status: "gone", at: null, note: "Товар закончился" } },
+    { id: "x3", title: "Термокружка Stanley, 470 мл", url: "", platform: "Wildberries", price: 3200, note: "", priority: 2, gifted: true, check: null }
   ];
 
   const app = document.getElementById("app");
@@ -196,6 +198,7 @@
         platform: String(i.platform || "").slice(0, 40),
         price: typeof i.price === "number" && isFinite(i.price) ? i.price : null,
         note: String(i.note || "").slice(0, 200),
+        priority: PRIORITIES.some(([p]) => p === i.priority) ? i.priority : DEFAULT_PRIORITY,
         gifted: !!i.gifted,
         giftedAt: typeof i.giftedAt === "string" ? i.giftedAt : null,
         addedAt: typeof i.addedAt === "string" ? i.addedAt : null,
@@ -308,11 +311,15 @@
         }, label, el("span", { class: "n" }, String(counts[k])))));
   }
 
-  /** Товары текущего фильтра: сначала желанные, подаренные в конце. */
+  /** Товары текущего фильтра: сначала по важности, подаренные в конце. */
   function visibleItems() {
     return state.items
       .slice()
-      .sort((a, b) => (a.gifted !== b.gifted ? (a.gifted ? 1 : -1) : String(b.addedAt || "").localeCompare(String(a.addedAt || ""))))
+      .sort((a, b) => {
+        if (a.gifted !== b.gifted) return a.gifted ? 1 : -1;
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return String(b.addedAt || "").localeCompare(String(a.addedAt || ""));
+      })
       .filter((i) => filter === "all" || (filter === "want" && !i.gifted) || (filter === "gifted" && i.gifted) || (filter === "gone" && isGone(i)));
   }
 
@@ -334,6 +341,7 @@
       ? el("a", { class: "name", href: item.url, target: "_blank", rel: "noopener noreferrer" }, item.title)
       : el("span", { class: "name" }, item.title);
     const meta = el("div", { class: "meta" },
+      priorityChip(item.priority),
       platform ? el("span", { class: "platform" }, platform) : null,
       item.gifted ? el("span", { class: "mark gifted" }, "Подарено") : statusMark(item, preview),
       item.note ? el("span", { class: "note" }, item.note) : null);
@@ -343,6 +351,14 @@
       el("div", { class: "side" },
         el("span", { class: "price" }, item.price != null ? fmtPrice(item.price) : ""),
         interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null));
+  }
+
+  /** Метка важности: шкала из пяти делений и подпись. */
+  function priorityChip(level) {
+    const label = (PRIORITIES.find(([p]) => p === level) || PRIORITIES[DEFAULT_PRIORITY - 1])[1];
+    const bars = [1, 2, 3, 4, 5].map((n) => el("i", { class: n <= 6 - level ? "on" : null }));
+    return el("span", { class: "prio prio-" + level, title: "Важность: " + label.toLowerCase() },
+      el("span", { class: "prio-bars", "aria-hidden": "true" }, bars), label);
   }
 
   /** Пометка о результате проверки ссылки. */
@@ -469,12 +485,28 @@
       idle();
       actions.append(del);
     }
+    const prio = priorityPicker(v.priority || DEFAULT_PRIORITY);
     const node = el("form", { class: "form", novalidate: true, "aria-label": isNew ? "Новое желание" : "Изменить желание" },
-      f.url.wrap, f.title.wrap, el("div", { class: "row2" }, f.price.wrap, f.platform.wrap), f.note.wrap, actions);
-    node.addEventListener("submit", (e) => { e.preventDefault(); submitForm(item, f); });
+      f.url.wrap, f.title.wrap, prio, el("div", { class: "row2" }, f.price.wrap, f.platform.wrap), f.note.wrap, actions);
+    node.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const picked = node.querySelector('input[name="f-prio"]:checked');
+      submitForm(item, f, picked ? Number(picked.value) : DEFAULT_PRIORITY);
+    });
     node.addEventListener("keydown", (e) => { if (e.key === "Escape") closeForm(); });
     focusLater(isNew ? f.url.input : f.title.input);
     return node;
+  }
+
+  /** Выбор важности из пяти уровней, от самого важного к наименее. */
+  function priorityPicker(current) {
+    return el("fieldset", { class: "fieldset" },
+      el("legend", null, "Важность"),
+      el("div", { class: "prio-pick" }, PRIORITIES.map(([p, label]) => {
+        const input = el("input", { type: "radio", name: "f-prio", id: "f-prio-" + p, value: String(p) });
+        input.checked = p === current;
+        return [input, el("label", { for: "f-prio-" + p }, label)];
+      })));
   }
 
   /** Поле формы с подписью и местом для ошибки. */
@@ -493,7 +525,7 @@
   }
 
   /** Проверяет форму и сохраняет товар. */
-  function submitForm(item, f) {
+  function submitForm(item, f, priority) {
     const title = f.title.input.value.trim();
     const rawUrl = f.url.input.value.trim();
     const url = rawUrl ? cleanUrl(rawUrl) : "";
@@ -507,7 +539,7 @@
       bad.input.focus();
       return;
     }
-    const data = { title: title, url: url, price: price, platform: f.platform.input.value.trim(), note: f.note.input.value.trim() };
+    const data = { title: title, url: url, price: price, priority: priority, platform: f.platform.input.value.trim(), note: f.note.input.value.trim() };
     if (item) {
       const it = state.items.find((i) => i.id === item.id);
       if (!it) return closeForm();

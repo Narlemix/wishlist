@@ -77,6 +77,26 @@ a.name:hover{text-decoration:underline;text-decoration-thickness:1px;text-underl
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13px;color:var(--muted)}
 .meta:empty{display:none}
 .platform{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase}
+.prio{display:inline-flex;align-items:center;gap:7px;color:var(--muted)}
+.prio-1,.prio-2{color:var(--ink)}
+.prio-bars{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+.prio-bars i{display:block;width:3px;border-radius:1px;background:var(--line)}
+.prio-bars i:nth-child(1){height:4px}
+.prio-bars i:nth-child(2){height:6px}
+.prio-bars i:nth-child(3){height:8px}
+.prio-bars i:nth-child(4){height:10px}
+.prio-bars i:nth-child(5){height:12px}
+.prio-bars i.on{background:var(--accent)}
+.is-gifted .prio{color:var(--faint)}
+.is-gifted .prio-bars i.on{background:var(--faint)}
+.fieldset{position:relative;min-width:0;margin:0;padding:0;border:0}
+.fieldset legend{margin-bottom:8px;padding:0;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.prio-pick{display:flex;flex-wrap:wrap;gap:6px}
+.prio-pick input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.prio-pick label{padding:7px 13px;border:1px solid var(--line);border-radius:999px;background:var(--bg);font-size:13px;line-height:1.2;color:var(--ink);cursor:pointer;user-select:none;transition:background-color .15s,border-color .15s,color .15s}
+.prio-pick label:hover{border-color:var(--faint)}
+.prio-pick input:checked+label{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.prio-pick input:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 .mark{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;line-height:1.5}
 .mark.gone{color:var(--warn);background:var(--warn-bg)}
 .mark.gifted{color:var(--gift);background:var(--gift-bg)}
