@@ -7,7 +7,11 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-02T23:59:50.755Z",
-      "check": null,
+      "check": {
+        "status": "unknown",
+        "at": "2026-10-03T00:08:38Z",
+        "note": "Ozon не открывается через VPN"
+      },
       "title": "Электрическая отвёртка",
       "url": "https://www.ozon.ru/product/elektricheskaya-otvertka-xiaomi-akkumulyatornaya-24v1-electric-screwdriver-nabor-dlya-tochnyh-rabot-1716822822/?at=1lun1TAjmVQrlGmWJ1AY7Uw_MzllLHp-&is_apparel_size_selected=true&sh=HHITQSoOMA",
       "price": 2900,
