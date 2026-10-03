@@ -55,6 +55,7 @@
   let saveTimer = null;
   let toastTimer = null;
   let filter = loadFilter();
+  let prefill = readPrefill();
 
   render();
   boot();
@@ -83,7 +84,29 @@
       }
     }
     loaded = true;
+    if (prefill) {
+      if (canEdit) editing = "new";
+      else {
+        loggingIn = true;
+        showToast("Войди, чтобы добавить товар в список", 5000);
+      }
+    }
     render();
+  }
+
+  /** Данные товара, переданные кнопкой «В вишлист» через адрес страницы. */
+  function readPrefill() {
+    const q = new URLSearchParams(location.search);
+    if (q.get("add") !== "1") return null;
+    try {
+      history.replaceState(null, "", location.pathname);
+    } catch (e) {}
+    const price = q.get("price") ? parsePrice(q.get("price")) : null;
+    return {
+      url: cleanUrl(q.get("url") || ""),
+      title: (q.get("title") || "").trim().slice(0, 140),
+      price: price ? price : null
+    };
   }
 
   /** Читает data.json, опубликованный на сайте. */
@@ -415,7 +438,21 @@
     else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Вход для владельца");
     return el("footer", { class: "foot" },
       el("p", null, "Ссылки и цены проверяются автоматически раз в день. " + last),
+      canEdit ? quickAdd() : null,
       action ? el("p", { class: "foot-actions" }, action) : null);
+  }
+
+  /** Блок с кнопкой для закладок, которая добавляет товар со страницы магазина. */
+  function quickAdd() {
+    const bm = el("a", { class: "bm", href: bookmarkletHref(), title: "Перетащи на панель закладок" }, "＋ В вишлист");
+    bm.addEventListener("click", (e) => {
+      e.preventDefault();
+      showToast("Эту кнопку нужно перетащить на панель закладок браузера", 4000);
+    });
+    return el("div", { class: "quick" },
+      el("p", { class: "quick-title" }, "Быстрое добавление со страницы магазина"),
+      el("p", { class: "quick-text" },
+        "Перетащи кнопку ", bm, " на панель закладок браузера. На странице товара в Ozon, Wildberries, Яндекс Маркете и других магазинах нажми её: название, цена и ссылка сами подставятся в форму."));
   }
 
   /** Форма входа по токену GitHub. */
@@ -447,6 +484,7 @@
         canEdit = true;
         loggingIn = false;
         loadFailed = false;
+        if (prefill) editing = "new";
         render();
         showToast("Готово, можно редактировать", 2500);
       } catch (err) {
@@ -482,7 +520,7 @@
   /** Форма добавления или изменения товара. */
   function form(item) {
     const isNew = !item;
-    const v = item || {};
+    const v = item || (prefill ? { url: prefill.url, title: prefill.title, price: prefill.price } : {});
     const f = {
       url: field("f-url", "Ссылка", v.url || "", "https://www.ozon.ru/product/…", { inputmode: "url", autocomplete: "off", spellcheck: "false" }),
       title: field("f-title", "Название", v.title || "", "Что хочется получить", { maxlength: "140" }),
@@ -490,9 +528,30 @@
       platform: field("f-platform", "Площадка", v.platform || "", detectPlatform(v.url) || "Определится по ссылке", { maxlength: "40" }),
       note: field("f-note", "Заметка", v.note || "", "Размер, цвет, модель", { maxlength: "200" })
     };
+    const hint = el("p", { class: "hint", hidden: true });
+    f.price.wrap.append(hint);
+    if (isNew && prefill && v.price != null) {
+      hint.textContent = "Цена со страницы товара";
+      hint.hidden = false;
+    }
+    let lookupTimer = null;
+    const lookup = async () => {
+      const url = cleanUrl(f.url.input.value);
+      if (!url || f.price.input.value.trim()) return;
+      const found = await wbLookup(url);
+      if (!found || cleanUrl(f.url.input.value) !== url || f.price.input.value.trim()) return;
+      f.price.input.value = String(found.price);
+      hint.textContent = "Цена с Wildberries";
+      hint.hidden = false;
+      if (!f.title.input.value.trim() && found.title) f.title.input.value = found.title;
+    };
     f.url.input.addEventListener("input", () => {
       f.platform.input.placeholder = detectPlatform(cleanUrl(f.url.input.value)) || "Определится по ссылке";
+      clearTimeout(lookupTimer);
+      lookupTimer = setTimeout(lookup, 500);
     });
+    f.price.input.addEventListener("input", () => { hint.hidden = true; });
+    if (isNew && v.url && v.price == null) lookup();
     const actions = el("div", { class: "actions" },
       el("button", { type: "submit", class: "btn" }, isNew ? "Добавить в список" : "Сохранить"),
       el("button", { type: "button", class: "btn ghost", onclick: closeForm }, "Отмена"));
@@ -515,8 +574,45 @@
       submitForm(item, f, picked ? Number(picked.value) : DEFAULT_PRIORITY);
     });
     node.addEventListener("keydown", (e) => { if (e.key === "Escape") closeForm(); });
-    focusLater(isNew ? f.url.input : f.title.input);
+    focusLater(isNew && !v.url ? f.url.input : f.title.input);
     return node;
+  }
+
+  /** Пробует получить цену и название товара Wildberries через их открытый API. */
+  async function wbLookup(url) {
+    const m = url.match(/wildberries\.[a-z]+\/catalog\/(\d+)/i);
+    if (!m) return null;
+    for (const ver of ["v4", "v2"]) {
+      try {
+        const r = await fetch("https://card.wb.ru/cards/" + ver + "/detail?appType=1&curr=rub&dest=-1257786&spp=30&nm=" + m[1]);
+        if (!r.ok) continue;
+        const j = await r.json();
+        const p = ((j.data && j.data.products) || j.products || [])[0];
+        if (!p) continue;
+        const size = (p.sizes || []).find((s) => s.price && (s.price.product || s.price.total));
+        const kop = size ? size.price.product || size.price.total : p.salePriceU || p.priceU;
+        if (!kop) continue;
+        const title = [p.brand, p.name].filter(Boolean).join(" ").slice(0, 140);
+        return { price: Math.round(kop / 100), title: title };
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  /** Код кнопки «В вишлист» для панели закладок. */
+  function bookmarkletHref() {
+    const base = location.origin + location.pathname;
+    const code = "(()=>{const d=document,q=s=>d.querySelector(s),t=e=>e?(e.content||e.textContent||'').trim():'';let p='',n='';"
+      + "for(const s of d.querySelectorAll('script[type=\"application/ld+json\"]')){try{const j=JSON.parse(s.textContent);"
+      + "for(const o of [].concat(j['@graph']||j)){if(o&&/Product/i.test(String(o['@type']))){n=n||o.name||'';"
+      + "const f=[].concat(o.offers||[])[0];if(f&&!p)p=String(f.price||f.lowPrice||'')}}}catch(e){}}"
+      + "if(!p)p=t(q('meta[itemprop=price],meta[property=\"product:price:amount\"],meta[property=\"og:price:amount\"]'));"
+      + "if(!p){const e=q('[data-widget=webPrice],.price-block__final-price,[data-auto=snippet-price-current],[data-auto=price-value]');"
+      + "if(e)p=((e.textContent||'').match(/\\d[\\d\\s\\u00a0\\u2009\\u202f]*/)||[''])[0]}"
+      + "n=n||t(q('meta[property=\"og:title\"]'))||t(q('h1'))||d.title;"
+      + "p=p.replace(/[^\\d.,]/g,'').replace(',','.');"
+      + "window.open('" + base + "?add=1&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(n.slice(0,140))+'&price='+encodeURIComponent(p),'_blank')})()";
+    return "javascript:" + encodeURI(code);
   }
 
   /** Выбор важности из пяти уровней, от самого важного к наименее. */
@@ -552,7 +648,8 @@
     const url = rawUrl ? cleanUrl(rawUrl) : "";
     const rawPrice = f.price.input.value.trim();
     const price = rawPrice ? parsePrice(rawPrice) : null;
-    setErr(f.url, rawUrl && !url ? "Нужна ссылка на страницу товара, например https://www.ozon.ru/product/…" : "");
+    setErr(f.url, rawUrl && !url ? "Нужна ссылка на страницу товара, например https://www.ozon.ru/product/…"
+      : !item && url && state.items.some((i) => i.url === url) ? "Этот товар уже есть в списке" : "");
     setErr(f.title, title ? "" : "Напиши, что это за подарок");
     setErr(f.price, rawPrice && price == null ? "Укажи цену числом, например 4990" : "");
     const bad = ["url", "title", "price"].map((k) => f[k]).find((x) => !x.err.hidden);
@@ -579,6 +676,7 @@
       }
     }
     editing = null;
+    prefill = null;
     render();
     save();
   }
@@ -593,6 +691,7 @@
   /** Закрывает форму без сохранения. */
   function closeForm() {
     editing = null;
+    prefill = null;
     render();
   }
 

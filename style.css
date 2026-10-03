@@ -116,6 +116,12 @@ a.name:hover{text-decoration:underline;text-decoration-thickness:1px;text-underl
 .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
 .field input[aria-invalid="true"]{border-color:var(--warn)}
 .err{margin:0;font-size:12px;color:var(--warn)}
+.hint{margin:0;font-size:12px;color:var(--gift)}
+.quick{display:grid;gap:4px;margin-top:20px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px}
+.foot .quick-title{font-size:13px;font-weight:500;color:var(--muted)}
+.foot .quick-text{line-height:2;color:var(--muted)}
+.bm{display:inline-block;padding:2px 12px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:500;line-height:1.6;text-decoration:none;white-space:nowrap;cursor:grab}
+.bm:active{cursor:grabbing}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .delete{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto}
