@@ -666,7 +666,7 @@
     else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Кабинет владельца");
     return el("footer", { class: "foot" },
       FB && !canEdit ? el("p", { class: "foot-lead" }, "Хочешь что-то подарить? Войди и нажми «Подарю я» у товара: бронь увидят все, и никто не купит этот подарок второй раз.") : null,
-      el("p", null, "Цены и карточки товаров обновляются каждый день в 18:52 по Москве. " + last),
+      el("p", null, "Цены и карточки товаров обновляются каждый день с 18:52 по Москве, обычно за 5–25 минут. " + last),
       canEdit ? quickAdd() : null,
       action ? el("p", { class: "foot-actions" }, action) : null);
   }
