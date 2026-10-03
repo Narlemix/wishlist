@@ -11,7 +11,7 @@ service cloud.firestore {
         && request.resource.data.name.size() >= 2
         && request.resource.data.name.size() <= 20
         && !request.resource.data.name.matches('.*/.*')
-        && request.resource.data.key == request.resource.data.name.lower()
+        && request.resource.data.key is string
         && request.resource.data.createdAt == request.time
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.key)).data.uid == uid;
       allow update, delete: if false;

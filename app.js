@@ -726,12 +726,13 @@
         submit.disabled = false;
         const code = err && err.code;
         if (code === "name-taken") setErr(name, "Это имя уже занято, выбери другое");
-        else if (code === "no-profile") setErr(name, "Аккаунт найден, но без профиля. Зарегистрируйся заново под другим именем");
+        else if (code === "timeout") setErr(pass, "Сервер не отвечает. Проверь интернет или попробуй без VPN");
+        else if (code === "permission-denied" || code === "profile-failed") setErr(pass, "База не приняла профиль (" + code + "). Напиши владельцу списка");
         else if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") setErr(pass, "Вход на сайте пока не включён. Напиши владельцу списка");
         else if (code === "auth/too-many-requests") setErr(pass, "Слишком много попыток. Подожди пару минут");
         else if (code === "auth/network-request-failed" || code === "unavailable") setErr(pass, "Нет связи с сервером. Проверь интернет");
-        else if (isReg) setErr(pass, "Не получилось зарегистрироваться. Попробуй ещё раз");
-        else setErr(pass, "Неверное имя или пароль");
+        else if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found" || code === "auth/invalid-login-credentials") setErr(pass, "Неверное имя или пароль");
+        else setErr(pass, (isReg ? "Не получилось зарегистрироваться" : "Не получилось войти") + (code ? " (" + code + ")" : "") + ". Попробуй ещё раз");
       }
     });
     focusLater(name.input);
@@ -758,41 +759,62 @@
     if (await nameTaken(name)) throw { code: "name-taken" };
     registering = true;
     try {
+      const email = await nameEmail(key);
       let cred;
       try {
-        cred = await FB.auth.createUserWithEmailAndPassword(await nameEmail(key), pw);
+        cred = await withTimeout(FB.auth.createUserWithEmailAndPassword(email, pw));
       } catch (e) {
-        throw e && e.code === "auth/email-already-in-use" ? { code: "name-taken" } : e;
-      }
-      const uid = cred.user.uid;
-      const batch = FB.db.batch();
-      batch.set(FB.db.collection("users").doc(uid), { name: name, key: key, createdAt: FB.fv.serverTimestamp() });
-      batch.set(FB.db.collection("usernames").doc(key), { uid: uid });
-      try {
-        await batch.commit();
-      } catch (e) {
+        if (!e || e.code !== "auth/email-already-in-use") throw e;
         try {
-          await cred.user.delete();
-        } catch (x) {}
-        throw { code: "name-taken" };
+          cred = await withTimeout(FB.auth.signInWithEmailAndPassword(email, pw));
+        } catch (x) {
+          throw { code: "name-taken" };
+        }
       }
-      guest = { uid: uid, name: name };
+      guest = await ensureProfile(cred.user, name);
       guestReady = true;
     } finally {
       registering = false;
     }
   }
 
-  /** Входит гостем по имени и паролю. */
+  /** Входит гостем по имени и паролю; аккаунт без профиля достраивает. */
   async function loginGuest(name, pw) {
-    const cred = await FB.auth.signInWithEmailAndPassword(await nameEmail(name.toLowerCase()), pw);
-    const g = await loadGuest(cred.user);
-    if (!g) {
-      await FB.auth.signOut();
-      throw { code: "no-profile" };
+    registering = true;
+    try {
+      const cred = await withTimeout(FB.auth.signInWithEmailAndPassword(await nameEmail(name.toLowerCase()), pw));
+      guest = await ensureProfile(cred.user, name);
+      guestReady = true;
+    } finally {
+      registering = false;
     }
-    guest = g;
-    guestReady = true;
+  }
+
+  /** Возвращает профиль гостя, при необходимости создавая его в базе. */
+  async function ensureProfile(user, name) {
+    const existing = await loadGuest(user);
+    if (existing) return existing;
+    const key = name.toLowerCase();
+    const owner = await withTimeout(FB.db.collection("usernames").doc(key).get());
+    if (owner.exists && (owner.data() || {}).uid !== user.uid) {
+      await FB.auth.signOut();
+      throw { code: "name-taken" };
+    }
+    const batch = FB.db.batch();
+    batch.set(FB.db.collection("users").doc(user.uid), { name: name, key: key, createdAt: FB.fv.serverTimestamp() });
+    if (!owner.exists) batch.set(FB.db.collection("usernames").doc(key), { uid: user.uid });
+    try {
+      await withTimeout(batch.commit());
+    } catch (e) {
+      await FB.auth.signOut();
+      throw e && e.code ? e : { code: "profile-failed" };
+    }
+    return { uid: user.uid, name: name };
+  }
+
+  /** Обрывает зависшую операцию с базой через 15 секунд. */
+  function withTimeout(promise) {
+    return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), 15000))]);
   }
 
   /** Выходит из аккаунта гостя. */
