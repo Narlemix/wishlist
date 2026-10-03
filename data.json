@@ -1,5 +1,22 @@
 {
   "title": "Мой вишлист",
   "checkedAt": null,
-  "items": []
+  "items": [
+    {
+      "id": "wmurni79h1r19",
+      "gifted": false,
+      "giftedAt": null,
+      "addedAt": "2026-10-03T00:25:47.333Z",
+      "check": null,
+      "priceAt": null,
+      "pricePrev": null,
+      "priceChangedAt": null,
+      "title": "Электрическая отвертка Xiaomi аккумуляторная 24в1 Electric Screwdriver набор для точных работ в кейсе",
+      "url": "https://www.ozon.ru/product/elektricheskaya-otvertka-xiaomi-akkumulyatornaya-24v1-electric-screwdriver-nabor-dlya-tochnyh-rabot-1716822822/?at=1lyn1Ye4y4QIc_0MmVgkFhIWJFXhgJe9&is_apparel_size_selected=true&sh=HHITQflDJA",
+      "price": 3225,
+      "priority": 3,
+      "platform": "",
+      "note": ""
+    }
+  ]
 }
