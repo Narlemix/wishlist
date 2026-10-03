@@ -3,7 +3,6 @@
 
   const CONFIG = repoConfig();
   const API = "https://api.github.com/repos/" + CONFIG.owner + "/" + CONFIG.repo + "/contents/data.json";
-  const TOKEN_HELP = "https://github.com/settings/personal-access-tokens/new";
   const TOKEN_KEY = "wishlist-token";
   const TABS = [["all", "Все"], ["free", "Свободные"], ["want", "Ждут подарка"], ["gifted", "Подарено"], ["gone", "Не работают"]];
   const GUEST_DOMAIN = "@guest.narlemix.github.io";
@@ -73,6 +72,7 @@
   render();
   boot();
   bootGuests();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && saveTimer) save();
   });
@@ -169,18 +169,29 @@
     render();
   }
 
-  /** Данные товара, переданные кнопкой «В вишлист» через адрес страницы. */
+  /** Данные товара из кнопки «В вишлист» или из «Поделиться» на телефоне. */
   function readPrefill() {
     const q = new URLSearchParams(location.search);
-    if (q.get("add") !== "1") return null;
+    const shared = q.has("text") || q.has("url");
+    if (q.get("add") !== "1" && !shared) return null;
     try {
       history.replaceState(null, "", location.pathname);
     } catch (e) {}
+    const text = q.get("text") || "";
+    const url = cleanUrl(q.get("url") || "") || cleanUrl((text.match(/https?:\/\/\S+/) || [""])[0]);
+    let title = (q.get("title") || "").trim();
+    if (!title || cleanUrl(title) === url) {
+      title = text.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+      const cut = title.match(/^[^:]{0,60}(?:ozon|wildberries|маркет|aliexpress|посмотр|наш[её]л)[^:]*:\s*(.{4,})$/i);
+      if (cut) title = cut[1];
+    }
     const price = q.get("price") ? parsePrice(q.get("price")) : null;
+    const old = q.get("old") ? parsePrice(q.get("old")) : null;
     return {
-      url: cleanUrl(q.get("url") || ""),
-      title: (q.get("title") || "").trim().slice(0, 140),
-      price: price ? price : null
+      url: url,
+      title: title.slice(0, 140),
+      price: price ? price : null,
+      priceOld: old && price && old > price ? old : null
     };
   }
 
@@ -251,7 +262,7 @@
       if (r && r.url === i.url) {
         i.check = r.check;
         if (r.priceAt && r.priceAt !== i.priceAt) {
-          Object.assign(i, { price: r.price, priceAt: r.priceAt, pricePrev: r.pricePrev, priceChangedAt: r.priceChangedAt });
+          Object.assign(i, { price: r.price, priceOld: r.priceOld, priceAt: r.priceAt, pricePrev: r.pricePrev, priceChangedAt: r.priceChangedAt });
         }
       }
     });
@@ -300,6 +311,7 @@
         url: cleanUrl(i.url),
         platform: String(i.platform || "").slice(0, 40),
         price: typeof i.price === "number" && isFinite(i.price) ? i.price : null,
+        priceOld: typeof i.priceOld === "number" && isFinite(i.priceOld) && typeof i.price === "number" && i.priceOld > i.price ? i.priceOld : null,
         priceAt: typeof i.priceAt === "string" ? i.priceAt : null,
         pricePrev: typeof i.pricePrev === "number" && isFinite(i.pricePrev) ? i.pricePrev : null,
         priceChangedAt: typeof i.priceChangedAt === "string" ? i.priceChangedAt : null,
@@ -548,7 +560,8 @@
       gift,
       el("div", { class: "body" }, name, meta),
       el("div", { class: "side" },
-        el("span", { class: "price", title: item.priceAt ? "Цена с маркетплейса на " + fmtDate(item.priceAt, true) : null }, item.price != null ? fmtPrice(item.price) : ""),
+        el("span", { class: "price", title: item.priceAt ? "Цена со скидкой, с маркетплейса на " + fmtDate(item.priceAt, true) : null }, item.price != null ? fmtPrice(item.price) : ""),
+        priceOldLine(item),
         priceDelta(item),
         interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null,
         preview ? null : guestAction(item)));
@@ -572,6 +585,15 @@
     if (!r) return el("button", { type: "button", class: "btn sm reserve", onclick: () => reserve(item.id) }, "Подарю я");
     if (guest && r.uid === guest.uid) return el("button", { type: "button", class: "link-btn", onclick: () => unreserve(item.id) }, "Отменить бронь");
     return null;
+  }
+
+  /** Цена без скидки, зачёркнутая, и размер скидки. */
+  function priceOldLine(item) {
+    if (item.price == null || item.priceOld == null || item.priceOld <= item.price) return null;
+    const pct = Math.round((1 - item.price / item.priceOld) * 100);
+    return el("span", { class: "price-old-line", title: "Цена без скидки" },
+      el("s", { class: "price-old" }, fmtPrice(item.priceOld)),
+      pct > 0 ? el("span", { class: "discount" }, "−" + pct + "%") : null);
   }
 
   /** Бейдж изменения цены за последние 30 дней. */
@@ -646,7 +668,8 @@
     return el("div", { class: "quick" },
       el("p", { class: "quick-title" }, "Быстрое добавление со страницы магазина"),
       el("p", { class: "quick-text" },
-        "Перетащи кнопку ", bm, " на панель закладок браузера. На странице товара в Ozon, Wildberries, Яндекс Маркете и других магазинах нажми её: название, цена и ссылка сами подставятся в форму."));
+        "Перетащи кнопку ", bm, " на панель закладок браузера. На странице товара в Ozon, Wildberries, Яндекс Маркете и других магазинах нажми её: название, обе цены и ссылка сами подставятся в форму."),
+      el("p", { class: "quick-text" }, "На Android установи этот сайт как приложение (меню браузера → «Добавить на главный экран»), и в «Поделиться» у товара появится «Вишлист»."));
   }
 
   /** Форма входа по токену GitHub. */
@@ -656,13 +679,11 @@
     const node = el("form", { class: "form", novalidate: true, "aria-label": "Кабинет владельца" },
       el("div", { class: "form-head" },
         el("p", { class: "form-title" }, "Кабинет владельца"),
-        el("p", { class: "form-text" }, "Вставь токен GitHub с доступом к репозиторию ", el("b", null, CONFIG.owner + "/" + CONFIG.repo),
-          " и правом Contents: Read and write. Токен хранится только в этом браузере.")),
+        el("p", { class: "form-text" }, "Вставь свой токен GitHub. Он хранится только в этом браузере.")),
       f.wrap,
       el("div", { class: "actions" },
         submit,
-        el("button", { type: "button", class: "btn ghost", onclick: () => { loggingIn = false; render(); } }, "Отмена"),
-        el("a", { class: "help-link", href: TOKEN_HELP, target: "_blank", rel: "noopener noreferrer" }, "Создать токен")));
+        el("button", { type: "button", class: "btn ghost", onclick: () => { loggingIn = false; render(); } }, "Отмена")));
     node.addEventListener("submit", async (e) => {
       e.preventDefault();
       const t = f.input.value.trim();
@@ -959,11 +980,12 @@
   /** Форма добавления или изменения товара. */
   function form(item) {
     const isNew = !item;
-    const v = item || (prefill ? { url: prefill.url, title: prefill.title, price: prefill.price } : {});
+    const v = item || (prefill ? { url: prefill.url, title: prefill.title, price: prefill.price, priceOld: prefill.priceOld } : {});
     const f = {
       url: field("f-url", "Ссылка", v.url || "", "https://www.ozon.ru/product/…", { inputmode: "url", autocomplete: "off", spellcheck: "false" }),
       title: field("f-title", "Название", v.title || "", "Что хочется получить", { maxlength: "140" }),
-      price: field("f-price", "Цена, ₽", v.price != null ? String(v.price) : "", "Подтянется по ссылке", { inputmode: "decimal", autocomplete: "off" }),
+      price: field("f-price", "Цена со скидкой, ₽", v.price != null ? String(v.price) : "", "Подтянется по ссылке", { inputmode: "decimal", autocomplete: "off" }),
+      priceOld: field("f-price-old", "Цена без скидки, ₽", v.priceOld != null ? String(v.priceOld) : "", "Если есть скидка", { inputmode: "decimal", autocomplete: "off" }),
       platform: field("f-platform", "Площадка", v.platform || "", detectPlatform(v.url) || "Определится по ссылке", { maxlength: "40" }),
       note: field("f-note", "Заметка", v.note || "", "Размер, цвет, модель", { maxlength: "200" })
     };
@@ -980,6 +1002,7 @@
       const found = await wbLookup(url);
       if (!found || cleanUrl(f.url.input.value) !== url || f.price.input.value.trim()) return;
       f.price.input.value = String(found.price);
+      if (found.old && found.old > found.price && !f.priceOld.input.value.trim()) f.priceOld.input.value = String(found.old);
       hint.textContent = "Цена с Wildberries";
       hint.hidden = false;
       if (!f.title.input.value.trim() && found.title) f.title.input.value = found.title;
@@ -1006,7 +1029,7 @@
     }
     const prio = priorityPicker(v.priority || DEFAULT_PRIORITY);
     const node = el("form", { class: "form", novalidate: true, "aria-label": isNew ? "Новое желание" : "Изменить желание" },
-      f.url.wrap, f.title.wrap, prio, el("div", { class: "row2" }, f.price.wrap, f.platform.wrap), f.note.wrap, actions);
+      f.url.wrap, f.title.wrap, prio, el("div", { class: "row2" }, f.price.wrap, f.priceOld.wrap), el("div", { class: "row2" }, f.platform.wrap, f.note.wrap), actions);
     node.addEventListener("submit", (e) => {
       e.preventDefault();
       const picked = node.querySelector('input[name="f-prio"]:checked');
@@ -1032,7 +1055,8 @@
         const kop = size ? size.price.product || size.price.total : p.salePriceU || p.priceU;
         if (!kop) continue;
         const title = [p.brand, p.name].filter(Boolean).join(" ").slice(0, 140);
-        return { price: Math.round(kop / 100), title: title };
+        const basic = size && size.price.basic ? size.price.basic : p.priceU;
+        return { price: Math.round(kop / 100), old: basic ? Math.round(basic / 100) : null, title: title };
       } catch (e) {}
     }
     return null;
@@ -1041,19 +1065,28 @@
   /** Код кнопки «В вишлист» для панели закладок. */
   function bookmarkletHref() {
     const base = location.origin + location.pathname;
-    const code = "(()=>{const d=document,q=s=>d.querySelector(s),t=e=>e?(e.content||e.textContent||'').trim():'';let p='',n='';"
+    const code = "(()=>{const d=document,q=s=>d.querySelector(s),t=e=>e?(e.content||e.textContent||'').trim():'';"
+      + "const num=s=>{const m=String(s).replace(/[\\s\\u00a0\\u2009\\u202f]/g,'').match(/\\d+(?:[.,]\\d+)?/);return m?parseFloat(m[0].replace(',','.')):NaN};"
+      + "let n='',ld=NaN;"
       + "for(const s of d.querySelectorAll('script[type=\"application/ld+json\"]')){try{const j=JSON.parse(s.textContent);"
       + "for(const o of [].concat(j['@graph']||j)){if(o&&/Product/i.test(String(o['@type']))){n=n||o.name||'';"
-      + "const f=[].concat(o.offers||[])[0];if(f&&!p)p=String(f.price||f.lowPrice||'')}}}catch(e){}}"
-      + "if(!p)p=t(q('meta[itemprop=price],meta[property=\"product:price:amount\"],meta[property=\"og:price:amount\"]'));"
-      + "if(!p){const e=q('[data-widget=webPrice],.price-block__final-price,[data-auto=snippet-price-current],[data-auto=price-value]');"
-      + "if(e)p=((e.textContent||'').match(/\\d[\\d\\s\\u00a0\\u2009\\u202f]*/)||[''])[0]}"
-      + "if(!p){let b=0;for(const e of d.querySelectorAll('[class*=rice]')){const x=(e.textContent||'').trim();"
-      + "if(x.length<40&&/\\d/.test(x)&&/₽|руб/.test(x)){const z=parseFloat(getComputedStyle(e).fontSize)||0;"
-      + "if(z>b){b=z;p=(x.match(/\\d[\\d\\s\\u00a0\\u2009\\u202f]*/)||[''])[0]}}}}"
+      + "const f=[].concat(o.offers||[])[0];if(f&&isNaN(ld))ld=num(f.price||f.lowPrice||'')}}}catch(e){}}"
+      + "let best=null,bz=0;"
+      + "for(const e of d.querySelectorAll('[class*=rice],[class*=Price],[data-widget=webPrice] *,[itemprop=price]')){"
+      + "const x=(e.textContent||'').trim();if(x.length<40&&/\\d/.test(x)&&/₽|руб/.test(x)&&e.children.length<4){"
+      + "const z=parseFloat(getComputedStyle(e).fontSize)||0;if(z>bz){bz=z;best=e}}}"
+      + "const re=/(\\d[\\d\\s\\u00a0\\u2009\\u202f]*(?:[.,]\\d{1,2})?)\\s*(?:₽|руб)/g;"
+      + "const grab=el=>{const tx=el.innerText||el.textContent||'';const out=[];let m;re.lastIndex=0;"
+      + "while((m=re.exec(tx))){const after=tx.slice(re.lastIndex,re.lastIndex+8);if(!/мес|×/.test(after))out.push(num(m[1]))}return out.filter(x=>x>0)};"
+      + "let v=[];if(best){let c=(best.parentElement||best).closest('[data-widget=webPrice],.price-block,[class*=price-block],[class*=PriceBlock]');"
+      + "if(!c){c=best;for(let i=0;i<6&&c.parentElement;i++){const p=c.parentElement;if((p.innerText||'').length>300)break;c=p;if(grab(c).length>=2)break}}"
+      + "v=grab(c);const mx=Math.max(...v);v=v.filter(x=>x>=mx*0.2)}"
+      + "let p=v.length?Math.min(...v):ld,o=v.length?Math.max(...v):NaN;"
+      + "if(isNaN(p))p=num(t(q('meta[itemprop=price],meta[property=\"product:price:amount\"],meta[property=\"og:price:amount\"]')));"
+      + "if(!(o>p))o=NaN;"
       + "n=n||t(q('meta[property=\"og:title\"]'))||t(q('h1'))||d.title;"
-      + "p=p.replace(/[^\\d.,]/g,'').replace(',','.');"
-      + "window.open('" + base + "?add=1&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(n.slice(0,140))+'&price='+encodeURIComponent(p),'_blank')})()";
+      + "window.open('" + base + "?add=1&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(String(n).slice(0,140))"
+      + "+'&price='+(isNaN(p)?'':p)+'&old='+(isNaN(o)?'':o),'_blank')})()";
     return "javascript:" + encodeURI(code);
   }
 
@@ -1090,16 +1123,21 @@
     const url = rawUrl ? cleanUrl(rawUrl) : "";
     const rawPrice = f.price.input.value.trim();
     const price = rawPrice ? parsePrice(rawPrice) : null;
+    const rawOld = f.priceOld.input.value.trim();
+    const priceOld = rawOld ? parsePrice(rawOld) : null;
     setErr(f.url, rawUrl && !url ? "Нужна ссылка на страницу товара, например https://www.ozon.ru/product/…"
       : !item && url && state.items.some((i) => i.url === url) ? "Этот товар уже есть в списке" : "");
     setErr(f.title, title ? "" : "Напиши, что это за подарок");
     setErr(f.price, rawPrice && price == null ? "Укажи цену числом, например 4990" : "");
-    const bad = ["url", "title", "price"].map((k) => f[k]).find((x) => !x.err.hidden);
+    setErr(f.priceOld, rawOld && priceOld == null ? "Укажи цену числом, например 5990"
+      : priceOld != null && price == null ? "Сначала укажи цену со скидкой"
+      : priceOld != null && price != null && priceOld <= price ? "Цена без скидки должна быть больше цены со скидкой" : "");
+    const bad = ["url", "title", "price", "priceOld"].map((k) => f[k]).find((x) => !x.err.hidden);
     if (bad) {
       bad.input.focus();
       return;
     }
-    const data = { title: title, url: url, price: price, priority: priority, platform: f.platform.input.value.trim(), note: f.note.input.value.trim() };
+    const data = { title: title, url: url, price: price, priceOld: priceOld, priority: priority, platform: f.platform.input.value.trim(), note: f.note.input.value.trim() };
     if (item) {
       const it = state.items.find((i) => i.id === item.id);
       if (!it) return closeForm();

@@ -201,6 +201,10 @@ a.name:hover{text-decoration:underline;text-decoration-color:var(--pc,var(--acce
 .cabinet-link{padding:0;border:0;background:none;color:inherit;font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .link-btn.danger{color:var(--warn);font-weight:500}
 .confirm{display:inline-flex;gap:10px}
+.price-old-line{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.price-old{color:var(--muted);text-decoration-thickness:1px}
+.discount{padding:0 6px;border-radius:999px;background:var(--good-bg);color:var(--good);font-weight:500;line-height:1.6}
+.is-gifted .price-old-line{opacity:.6}
 @media (max-width:520px){
   .row2{grid-template-columns:1fr}
   .item{gap:0 12px;padding:14px}
