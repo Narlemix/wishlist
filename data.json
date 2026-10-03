@@ -52,6 +52,23 @@
       "giftedAt": null,
       "addedAt": "2026-10-03T00:26:47.436Z",
       "check": null
+    },
+    {
+      "id": "wmurr1szaz9bj",
+      "gifted": false,
+      "giftedAt": null,
+      "addedAt": "2026-10-03T02:05:00.790Z",
+      "check": null,
+      "priceAt": null,
+      "pricePrev": null,
+      "priceChangedAt": null,
+      "title": "Льдогенератор",
+      "url": "https://market.yandex.ru/cc/BDNUZd",
+      "price": null,
+      "priceOld": null,
+      "priority": 3,
+      "platform": "",
+      "note": ""
     }
   ]
 }
