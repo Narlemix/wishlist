@@ -55,20 +55,20 @@
     },
     {
       "id": "wmurr1szaz9bj",
-      "gifted": false,
-      "giftedAt": null,
-      "addedAt": "2026-10-03T02:05:00.790Z",
-      "check": null,
+      "title": "Льдогенератор",
+      "url": "https://market.yandex.ru/cc/BDNUZd",
+      "platform": "",
+      "price": null,
+      "priceOld": null,
       "priceAt": null,
       "pricePrev": null,
       "priceChangedAt": null,
-      "title": "Льдогенератор",
-      "url": "https://market.yandex.ru/cc/BDNUZd",
-      "price": null,
-      "priceOld": null,
+      "note": "",
       "priority": 3,
-      "platform": "",
-      "note": ""
+      "gifted": false,
+      "giftedAt": null,
+      "addedAt": "2026-10-03T02:05:00.790Z",
+      "check": null
     }
   ]
 }
