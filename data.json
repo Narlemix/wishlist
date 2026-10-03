@@ -1,17 +1,17 @@
 {
   "title": "Мой вишлист",
-  "checkedAt": "2026-10-03T06:57:01Z",
+  "checkedAt": "2026-10-03T20:46:03Z",
   "items": [
     {
       "id": "wmurni79h1r19",
       "title": "Электрическая отвертка Xiaomi аккумуляторная 24в1 Electric Screwdriver набор для точных работ в кейсе",
       "url": "https://www.ozon.ru/product/elektricheskaya-otvertka-xiaomi-akkumulyatornaya-24v1-electric-screwdriver-nabor-dlya-tochnyh-rabot-1716822822/?at=1lyn1Ye4y4QIc_0MmVgkFhIWJFXhgJe9&is_apparel_size_selected=true&sh=HHITQflDJA",
       "platform": "",
-      "price": 2902,
-      "priceOld": 3225,
-      "priceAt": "2026-10-03T06:57:01Z",
-      "pricePrev": null,
-      "priceChangedAt": null,
+      "price": 2845,
+      "priceOld": 3161,
+      "priceAt": "2026-10-03T20:46:03Z",
+      "pricePrev": 2902,
+      "priceChangedAt": "2026-10-03T20:46:03Z",
       "note": "",
       "priority": 3,
       "gifted": false,
@@ -19,7 +19,7 @@
       "addedAt": "2026-10-03T00:25:47.333Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T06:57:01Z",
+        "at": "2026-10-03T20:46:03Z",
         "note": ""
       }
     },
@@ -28,11 +28,11 @@
       "title": "Сумка дорожная коричневая, сумка спортивная через плечо для тренировок",
       "url": "https://www.ozon.ru/product/sumka-dorozhnaya-korichnevaya-sumka-sportivnaya-cherez-plecho-dlya-trenirovok-1318735751/?at=1lyn1MZUICRCECCvBFMd5F8nrxdKSPgH&is_apparel_size_selected=true&sh=HHITQflDJA",
       "platform": "",
-      "price": 3075,
-      "priceOld": 3416,
-      "priceAt": "2026-10-03T06:57:01Z",
-      "pricePrev": null,
-      "priceChangedAt": null,
+      "price": 3097,
+      "priceOld": 3441,
+      "priceAt": "2026-10-03T20:46:03Z",
+      "pricePrev": 3075,
+      "priceChangedAt": "2026-10-03T20:46:03Z",
       "note": "",
       "priority": 4,
       "gifted": false,
@@ -40,7 +40,7 @@
       "addedAt": "2026-10-03T00:26:16.529Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T06:57:01Z",
+        "at": "2026-10-03T20:46:03Z",
         "note": ""
       }
     },
@@ -51,7 +51,7 @@
       "platform": "",
       "price": 721,
       "priceOld": 2486,
-      "priceAt": "2026-10-03T06:57:01Z",
+      "priceAt": "2026-10-03T20:46:03Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -61,7 +61,7 @@
       "addedAt": "2026-10-03T00:26:47.436Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T06:57:01Z",
+        "at": "2026-10-03T20:46:03Z",
         "note": ""
       }
     }
