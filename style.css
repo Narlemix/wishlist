@@ -197,6 +197,10 @@ a.name:hover{text-decoration:underline;text-decoration-color:var(--pc,var(--acce
 .auth-tab{padding:7px 16px;border:0;border-radius:999px;background:transparent;font-size:14px;color:var(--muted);cursor:pointer}
 .auth-tab[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:500;box-shadow:var(--shadow)}
 .foot .foot-lead{margin-bottom:10px;font-size:14px;color:var(--muted)}
+.cabinet-sub{flex-basis:100%;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--accent-ink) 25%,transparent);font-size:13px;opacity:.95}
+.cabinet-link{padding:0;border:0;background:none;color:inherit;font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.link-btn.danger{color:var(--warn);font-weight:500}
+.confirm{display:inline-flex;gap:10px}
 @media (max-width:520px){
   .row2{grid-template-columns:1fr}
   .item{gap:0 12px;padding:14px}

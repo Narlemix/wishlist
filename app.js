@@ -67,6 +67,8 @@
   let reserving = {};
   let authMode = null;
   let pendingReserve = null;
+  let guestAdmin = false;
+  let confirmUnreserve = null;
 
   render();
   boot();
@@ -102,6 +104,7 @@
     FB.auth.onAuthStateChanged(async (user) => {
       if (registering) return;
       guest = user ? await loadGuest(user) : null;
+      guestAdmin = await checkAdmin(guest);
       guestReady = true;
       softRender();
     });
@@ -111,10 +114,21 @@
   async function loadGuest(user) {
     try {
       const doc = await FB.db.collection("users").doc(user.uid).get();
-      const name = doc.exists ? String((doc.data() || {}).name || "") : "";
-      return name ? { uid: user.uid, name: name } : null;
+      const d = doc.exists ? doc.data() || {} : {};
+      const name = String(d.name || "");
+      return name ? { uid: user.uid, name: name, key: String(d.key || name.toLowerCase()) } : null;
     } catch (e) {
       return null;
+    }
+  }
+
+  /** Есть ли у гостя права администратора броней (документ admins/<имя>). */
+  async function checkAdmin(g) {
+    if (!g || !FB) return false;
+    try {
+      return (await FB.db.collection("admins").doc(g.key).get()).exists;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -325,7 +339,7 @@
       canEdit ? cabinetBar() : null,
       header(),
       loggingIn && !canEdit ? loginPanel() : null,
-      authMode && !canEdit ? authPanel() : null,
+      authMode ? authPanel() : null,
       editing === "new" ? form(null) : null,
       tabsNode,
       listNode,
@@ -338,7 +352,26 @@
     return el("div", { class: "cabinet-bar" },
       el("span", { class: "cabinet-title" }, "Кабинет владельца"),
       el("span", { class: "cabinet-text" }, "Здесь ты добавляешь, меняешь и удаляешь товары и отмечаешь подаренное. Гости видят список и могут только забронировать подарок."),
-      el("button", { type: "button", class: "cabinet-out", onclick: logout }, "Выйти"));
+      el("button", { type: "button", class: "cabinet-out", onclick: logout }, "Выйти"),
+      FB ? cabinetBookings() : null);
+  }
+
+  /** Строка кабинета про управление чужими бронями. */
+  function cabinetBookings() {
+    if (!guestReady) return null;
+    if (guest && guestAdmin) {
+      return el("span", { class: "cabinet-sub" },
+        "Брони: ты вошёл как " + guest.name + " и можешь снимать любые. ",
+        el("button", { type: "button", class: "cabinet-link", onclick: guestLogout }, "Выйти из аккаунта"));
+    }
+    if (guest) {
+      return el("span", { class: "cabinet-sub" },
+        "Брони: аккаунт " + guest.name + " не назначен администратором, поэтому снимать чужие брони нельзя. ",
+        el("button", { type: "button", class: "cabinet-link", onclick: guestLogout }, "Выйти из аккаунта"));
+    }
+    return el("span", { class: "cabinet-sub" },
+      "Чтобы снимать чужие брони, войди своим аккаунтом гостя. ",
+      el("button", { type: "button", class: "cabinet-link", onclick: () => openAuth("login") }, "Войти"));
   }
 
   /** Шапка: название списка, сводка и кнопки владельца или гостя. */
@@ -532,7 +565,8 @@
 
   /** Кнопка гостя: забронировать подарок или отменить свою бронь. */
   function guestAction(item) {
-    if (canEdit || !FB || item.gifted) return null;
+    if (canEdit) return ownerBookingAction(item);
+    if (!FB || item.gifted) return null;
     const r = reservations[item.id];
     if (reserving[item.id]) return el("span", { class: "res-wait" }, "Секунду…");
     if (!r) return el("button", { type: "button", class: "btn sm reserve", onclick: () => reserve(item.id) }, "Подарю я");
@@ -715,6 +749,7 @@
         if (isReg) await registerGuest(n, pw);
         else await loginGuest(n, pw);
         authMode = null;
+        guestAdmin = await checkAdmin(guest);
         render();
         showToast("Привет, " + guest.name + "!", 2500);
         if (pendingReserve) {
@@ -778,6 +813,19 @@
     }
   }
 
+  /** Кнопка владельца: снять чужую бронь с подтверждением. */
+  function ownerBookingAction(item) {
+    const r = reservations[item.id];
+    if (!FB || !r || !guestAdmin) return null;
+    if (reserving[item.id]) return el("span", { class: "res-wait" }, "Секунду…");
+    if (confirmUnreserve === item.id) {
+      return el("span", { class: "confirm" },
+        el("button", { type: "button", class: "link-btn danger", onclick: () => { confirmUnreserve = null; unreserve(item.id); } }, "Да, снять"),
+        el("button", { type: "button", class: "link-btn", onclick: () => { confirmUnreserve = null; render(); } }, "Нет"));
+    }
+    return el("button", { type: "button", class: "link-btn", onclick: () => { confirmUnreserve = item.id; render(); } }, "Снять бронь");
+  }
+
   /** Входит гостем по имени и паролю; аккаунт без профиля достраивает. */
   async function loginGuest(name, pw) {
     registering = true;
@@ -809,7 +857,7 @@
       await FB.auth.signOut();
       throw e && e.code ? e : { code: "profile-failed" };
     }
-    return { uid: user.uid, name: name };
+    return { uid: user.uid, name: name, key: key };
   }
 
   /** Обрывает зависшую операцию с базой через 15 секунд. */
@@ -823,6 +871,7 @@
       await FB.auth.signOut();
     } catch (e) {}
     guest = null;
+    guestAdmin = false;
     render();
   }
 
@@ -1091,6 +1140,7 @@
   /** Удаляет товар. */
   function removeItem(id) {
     state.items = state.items.filter((i) => i.id !== id);
+    if (FB && guestAdmin && reservations[id]) FB.db.collection("reservations").doc(id).delete().catch(() => {});
     editing = null;
     render();
     save();
