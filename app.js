@@ -560,7 +560,9 @@
       gift,
       el("div", { class: "body" }, name, meta),
       el("div", { class: "side" },
-        el("span", { class: "price", title: item.priceAt ? "Цена со скидкой, с маркетплейса на " + fmtDate(item.priceAt, true) : null }, item.price != null ? fmtPrice(item.price) : ""),
+        item.price != null
+          ? el("span", { class: "price", title: item.priceAt ? "Цена со скидкой, с маркетплейса на " + fmtDate(item.priceAt, true) : null }, fmtPrice(item.price))
+          : interactive && item.url && !item.gifted ? el("span", { class: "price-wait" }, "цена — после проверки") : el("span", { class: "price" }, ""),
         priceOldLine(item),
         priceDelta(item),
         interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null,
@@ -993,6 +995,9 @@
     f.price.wrap.append(hint);
     if (isNew && prefill && v.price != null) {
       hint.textContent = "Цена со страницы товара";
+      hint.hidden = false;
+    } else if (isNew && prefill && v.url) {
+      hint.textContent = "Можно оставить пустой: цену подставит ежедневная проверка";
       hint.hidden = false;
     }
     let lookupTimer = null;
