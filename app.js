@@ -55,6 +55,7 @@
   let saveTimer = null;
   let toastTimer = null;
   let filter = loadFilter();
+  let prioFilter = loadPrioFilter();
   let prefill = readPrefill();
 
   render();
@@ -250,11 +251,13 @@
     } else if (loadFailed) {
       listNode = el("p", { class: "empty-filter" }, "Не получилось загрузить список. Обнови страницу через минуту.");
     } else if (state.items.length) {
-      tabsNode = tabs();
+      tabsNode = el("div", { class: "filters" }, tabs(), prioFilterRow());
       const items = visibleItems();
       listNode = items.length
         ? el("ul", { class: "list" }, items.map((i) => row(i, false)))
-        : el("p", { class: "empty-filter" }, "В этом разделе пусто");
+        : el("div", { class: "empty-filter" },
+          el("span", null, "Здесь пусто"),
+          prioFilter ? el("button", { type: "button", class: "foot-btn", onclick: () => setPrioFilter(0) }, "Показать любую важность") : null);
     } else {
       listNode = editing === "new" ? null : emptyState();
     }
@@ -351,7 +354,47 @@
         if (a.priority !== b.priority) return a.priority - b.priority;
         return String(b.addedAt || "").localeCompare(String(a.addedAt || ""));
       })
-      .filter((i) => filter === "all" || (filter === "want" && !i.gifted) || (filter === "gifted" && i.gifted) || (filter === "gone" && isGone(i)));
+      .filter(matchesTab)
+      .filter((i) => !prioFilter || i.priority === prioFilter);
+  }
+
+  /** Подходит ли товар под выбранную вкладку. */
+  function matchesTab(i) {
+    return filter === "all" || (filter === "want" && !i.gifted) || (filter === "gifted" && i.gifted) || (filter === "gone" && isGone(i));
+  }
+
+  /** Ряд фильтров по важности с количеством товаров в текущей вкладке. */
+  function prioFilterRow() {
+    const inTab = state.items.filter(matchesTab);
+    const chip = (p, label, n) => el("button", {
+      type: "button",
+      class: "pf",
+      "aria-pressed": prioFilter === p ? "true" : "false",
+      disabled: !n && prioFilter !== p,
+      onclick: () => setPrioFilter(prioFilter === p ? 0 : p)
+    }, p ? prioBars(p) : null, label, el("span", { class: "n" }, String(n)));
+    return el("div", { class: "prio-filter", role: "group", "aria-label": "Фильтр по важности" },
+      chip(0, "Любая важность", inTab.length),
+      PRIORITIES.map(([p, label]) => chip(p, label, inTab.filter((i) => i.priority === p).length)));
+  }
+
+  /** Включает фильтр по важности (0 — показывать всё). */
+  function setPrioFilter(p) {
+    prioFilter = p;
+    try {
+      localStorage.setItem("wishlist-prio", String(p));
+    } catch (e) {}
+    render();
+  }
+
+  /** Восстанавливает выбранный фильтр по важности. */
+  function loadPrioFilter() {
+    try {
+      const v = Number(localStorage.getItem("wishlist-prio"));
+      return PRIORITIES.some(([p]) => p === v) ? v : 0;
+    } catch (e) {
+      return 0;
+    }
   }
 
   /** Одна строка списка. */
@@ -376,7 +419,7 @@
       platform ? el("span", { class: "platform" }, platform) : null,
       item.gifted ? el("span", { class: "mark gifted" }, "Подарено") : statusMark(item, preview),
       item.note ? el("span", { class: "note" }, item.note) : null);
-    return el("li", { class: "item" + (item.gifted ? " is-gifted" : "") + (isGone(item) ? " is-gone" : "") },
+    return el("li", { class: "item p" + item.priority + (item.gifted ? " is-gifted" : "") + (isGone(item) ? " is-gone" : "") },
       gift,
       el("div", { class: "body" }, name, meta),
       el("div", { class: "side" },
@@ -400,9 +443,13 @@
   /** Метка важности: шкала из пяти делений и подпись. */
   function priorityChip(level) {
     const label = (PRIORITIES.find(([p]) => p === level) || PRIORITIES[DEFAULT_PRIORITY - 1])[1];
-    const bars = [1, 2, 3, 4, 5].map((n) => el("i", { class: n <= 6 - level ? "on" : null }));
-    return el("span", { class: "prio prio-" + level, title: "Важность: " + label.toLowerCase() },
-      el("span", { class: "prio-bars", "aria-hidden": "true" }, bars), label);
+    return el("span", { class: "prio prio-" + level, title: "Важность: " + label.toLowerCase() }, prioBars(level), label);
+  }
+
+  /** Шкала из пяти делений: чем важнее, тем больше закрашено. */
+  function prioBars(level) {
+    return el("span", { class: "prio-bars", "aria-hidden": "true" },
+      [1, 2, 3, 4, 5].map((n) => el("i", { class: n <= 6 - level ? "on" : null })));
   }
 
   /** Пометка о результате проверки ссылки. */
