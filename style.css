@@ -205,7 +205,9 @@ a.name:hover{text-decoration:underline;text-decoration-color:var(--pc,var(--acce
 .price-old{color:var(--muted);text-decoration-thickness:1px}
 .discount{padding:0 6px;border-radius:999px;background:var(--good-bg);color:var(--good);font-weight:500;line-height:1.6}
 .is-gifted .price-old-line{opacity:.6}
-.price-wait{padding-top:2px;font-size:12px;color:var(--faint);white-space:nowrap}
+.price-wait{padding-top:2px;max-width:10em;font-size:12px;line-height:1.35;color:var(--faint);text-align:right}
+.name-pending{color:var(--muted)}
+.hint.muted{color:var(--faint)}
 @media (max-width:520px){
   .row2{grid-template-columns:1fr}
   .item{gap:0 12px;padding:14px}

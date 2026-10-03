@@ -33,6 +33,10 @@
     [/(^|\.)store\.steampowered\.com$/, "Steam"],
     [/(^|\.)apple\.com$/, "Apple"]
   ];
+  const WB_BASKETS = [[0, 1], [144, 2], [288, 3], [432, 4], [720, 5], [1008, 6], [1062, 7], [1116, 8], [1170, 9], [1314, 10],
+    [1602, 11], [1656, 12], [1920, 13], [2046, 14], [2190, 15], [2406, 16], [2622, 17], [2838, 18], [3054, 19], [3270, 20],
+    [3486, 21], [3702, 22], [3918, 23], [4134, 24], [4350, 25], [4566, 26], [4956, 27], [5267, 28], [5836, 30], [7074, 34],
+    [7868, 36], [8344, 38], [8821, 39], [9617, 41], [10525, 42], [11194, 43], [12479, 44], [12752, 45]];
   const EXAMPLES = [
     { id: "x1", title: "Наушники Sony WH-1000XM5", url: "", platform: "Ozon", price: 32990, note: "чёрные", priority: 1, gifted: false, check: null },
     { id: "x2", title: "«Мастер и Маргарита», иллюстрированное издание", url: "", platform: "Лабиринт", price: 1450, note: "", priority: 4, gifted: false, check: { status: "gone", at: null, note: "Товар закончился" } },
@@ -261,6 +265,7 @@
       const r = remote.get(i.id);
       if (r && r.url === i.url) {
         i.check = r.check;
+        if (!i.title && r.title) i.title = r.title;
         if (r.priceAt && r.priceAt !== i.priceAt) {
           Object.assign(i, { price: r.price, priceOld: r.priceOld, priceAt: r.priceAt, pricePrev: r.pricePrev, priceChangedAt: r.priceChangedAt });
         }
@@ -305,9 +310,9 @@
     return {
       title: typeof s.title === "string" && s.title.trim() ? s.title.trim().slice(0, 80) : "Мой вишлист",
       checkedAt: typeof s.checkedAt === "string" ? s.checkedAt : null,
-      items: items.filter((i) => i && i.id && i.title).map((i) => ({
+      items: items.filter((i) => i && i.id && (i.title || i.url)).map((i) => ({
         id: String(i.id),
-        title: String(i.title).slice(0, 140),
+        title: String(i.title || "").trim().slice(0, 140),
         url: cleanUrl(i.url),
         platform: String(i.platform || "").slice(0, 40),
         price: typeof i.price === "number" && isFinite(i.price) ? i.price : null,
@@ -323,7 +328,7 @@
         check: i.check && ["ok", "gone", "unknown"].includes(i.check.status)
           ? { status: i.check.status, at: typeof i.check.at === "string" ? i.check.at : null, note: String(i.check.note || "").slice(0, 120) }
           : null
-      }))
+      })).filter((i) => i.title || i.url)
     };
   }
 
@@ -547,9 +552,14 @@
       disabled: !interactive,
       onclick: () => toggleGift(item.id)
     }) : null;
+    const label = item.title || (platform ? "Товар с " + platform : "Товар по ссылке");
+    const nameCls = "name" + (item.title ? "" : " name-pending");
     const name = item.url
-      ? el("a", { class: "name", href: item.url, target: "_blank", rel: "noopener noreferrer" }, item.title)
-      : el("span", { class: "name" }, item.title);
+      ? el("a", { class: nameCls, href: item.url, target: "_blank", rel: "noopener noreferrer" }, label)
+      : el("span", { class: nameCls }, label);
+    const waitText = !item.gifted && item.url && item.price == null
+      ? (item.title ? "цена — после проверки" : "название и цена — после проверки")
+      : !item.gifted && !item.title ? "название — после проверки" : "";
     const meta = el("div", { class: "meta" },
       priorityChip(item.priority),
       platform ? el("span", { class: "platform" }, platform) : null,
@@ -562,7 +572,8 @@
       el("div", { class: "side" },
         item.price != null
           ? el("span", { class: "price", title: item.priceAt ? "Цена со скидкой, с маркетплейса на " + fmtDate(item.priceAt, true) : null }, fmtPrice(item.price))
-          : interactive && item.url && !item.gifted ? el("span", { class: "price-wait" }, "цена — после проверки") : el("span", { class: "price" }, ""),
+          : el("span", { class: "price" }, ""),
+        interactive && waitText ? el("span", { class: "price-wait" }, waitText) : null,
         priceOldLine(item),
         priceDelta(item),
         interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null,
@@ -985,40 +996,53 @@
     const v = item || (prefill ? { url: prefill.url, title: prefill.title, price: prefill.price, priceOld: prefill.priceOld } : {});
     const f = {
       url: field("f-url", "Ссылка", v.url || "", "https://www.ozon.ru/product/…", { inputmode: "url", autocomplete: "off", spellcheck: "false" }),
-      title: field("f-title", "Название", v.title || "", "Что хочется получить", { maxlength: "140" }),
-      price: field("f-price", "Цена со скидкой, ₽", v.price != null ? String(v.price) : "", "Подтянется по ссылке", { inputmode: "decimal", autocomplete: "off" }),
+      title: field("f-title", "Название", v.title || "", "Можно не писать, если есть ссылка", { maxlength: "140" }),
+      price: field("f-price", "Цена со скидкой, ₽", v.price != null ? String(v.price) : "", "Подставит проверка", { inputmode: "decimal", autocomplete: "off" }),
       priceOld: field("f-price-old", "Цена без скидки, ₽", v.priceOld != null ? String(v.priceOld) : "", "Если есть скидка", { inputmode: "decimal", autocomplete: "off" }),
       platform: field("f-platform", "Площадка", v.platform || "", detectPlatform(v.url) || "Определится по ссылке", { maxlength: "40" }),
       note: field("f-note", "Заметка", v.note || "", "Размер, цвет, модель", { maxlength: "200" })
     };
     const hint = el("p", { class: "hint", hidden: true });
     f.price.wrap.append(hint);
+    const tHint = el("p", { class: "hint muted", hidden: true }, "Название и цену подставит ежедневная проверка");
+    f.title.wrap.append(tHint);
+    const syncTitleHint = () => {
+      tHint.hidden = !cleanUrl(f.url.input.value) || !!f.title.input.value.trim();
+    };
+    syncTitleHint();
+    f.title.input.addEventListener("input", syncTitleHint);
     if (isNew && prefill && v.price != null) {
       hint.textContent = "Цена со страницы товара";
       hint.hidden = false;
-    } else if (isNew && prefill && v.url) {
+    } else if (isNew && prefill && v.url && v.title) {
       hint.textContent = "Можно оставить пустой: цену подставит ежедневная проверка";
       hint.hidden = false;
     }
     let lookupTimer = null;
     const lookup = async () => {
       const url = cleanUrl(f.url.input.value);
-      if (!url || f.price.input.value.trim()) return;
+      if (!url || (f.price.input.value.trim() && f.title.input.value.trim())) return;
       const found = await wbLookup(url);
-      if (!found || cleanUrl(f.url.input.value) !== url || f.price.input.value.trim()) return;
-      f.price.input.value = String(found.price);
-      if (found.old && found.old > found.price && !f.priceOld.input.value.trim()) f.priceOld.input.value = String(found.old);
-      hint.textContent = "Цена с Wildberries";
-      hint.hidden = false;
-      if (!f.title.input.value.trim() && found.title) f.title.input.value = found.title;
+      if (!found || cleanUrl(f.url.input.value) !== url) return;
+      if (!f.title.input.value.trim() && found.title) {
+        f.title.input.value = found.title;
+        syncTitleHint();
+      }
+      if (found.price && !f.price.input.value.trim()) {
+        f.price.input.value = String(found.price);
+        if (found.old && found.old > found.price && !f.priceOld.input.value.trim()) f.priceOld.input.value = String(found.old);
+        hint.textContent = "Цена с Wildberries";
+        hint.hidden = false;
+      }
     };
     f.url.input.addEventListener("input", () => {
       f.platform.input.placeholder = detectPlatform(cleanUrl(f.url.input.value)) || "Определится по ссылке";
+      syncTitleHint();
       clearTimeout(lookupTimer);
       lookupTimer = setTimeout(lookup, 500);
     });
     f.price.input.addEventListener("input", () => { hint.hidden = true; });
-    if (isNew && v.url && v.price == null) lookup();
+    if (isNew && v.url && (v.price == null || !v.title)) lookup();
     const actions = el("div", { class: "actions" },
       el("button", { type: "submit", class: "btn" }, isNew ? "Добавить в список" : "Сохранить"),
       el("button", { type: "button", class: "btn ghost", onclick: closeForm }, "Отмена"));
@@ -1045,13 +1069,21 @@
     return node;
   }
 
-  /** Пробует получить цену и название товара Wildberries через их открытый API. */
+  /** Пробует получить название и цену товара Wildberries по ссылке. */
   async function wbLookup(url) {
     const m = url.match(/wildberries\.[a-z]+\/catalog\/(\d+)/i);
     if (!m) return null;
+    const nm = Number(m[1]);
+    const [price, title] = await Promise.all([wbPrice(nm), wbTitle(nm)]);
+    if (!price && !title) return null;
+    return Object.assign({ price: null, old: null, title: title || "" }, price || {}, title ? { title: title } : {});
+  }
+
+  /** Цена товара WB через открытый API (бывает недоступен). */
+  async function wbPrice(nm) {
     for (const ver of ["v4", "v2"]) {
       try {
-        const r = await fetch("https://card.wb.ru/cards/" + ver + "/detail?appType=1&curr=rub&dest=-1257786&spp=30&nm=" + m[1]);
+        const r = await fetch("https://card.wb.ru/cards/" + ver + "/detail?appType=1&curr=rub&dest=-1257786&spp=30&nm=" + nm);
         if (!r.ok) continue;
         const j = await r.json();
         const p = ((j.data && j.data.products) || j.products || [])[0];
@@ -1059,12 +1091,30 @@
         const size = (p.sizes || []).find((s) => s.price && (s.price.product || s.price.total));
         const kop = size ? size.price.product || size.price.total : p.salePriceU || p.priceU;
         if (!kop) continue;
-        const title = [p.brand, p.name].filter(Boolean).join(" ").slice(0, 140);
         const basic = size && size.price.basic ? size.price.basic : p.priceU;
-        return { price: Math.round(kop / 100), old: basic ? Math.round(basic / 100) : null, title: title };
+        return { price: Math.round(kop / 100), old: basic ? Math.round(basic / 100) : null };
       } catch (e) {}
     }
     return null;
+  }
+
+  /** Название товара WB из его карточки на сервере картинок. */
+  async function wbTitle(nm) {
+    const vol = Math.floor(nm / 1e5);
+    const path = "/vol" + vol + "/part" + Math.floor(nm / 1e3) + "/" + nm + "/info/ru/card.json";
+    const est = WB_BASKETS.reduce((h, [v, b]) => (vol >= v ? b : h), 1);
+    const near = [est - 1, est, est + 1, est + 2].filter((h) => h >= 1);
+    const rest = [];
+    for (let h = 1; h <= 80; h++) if (!near.includes(h)) rest.push(h);
+    const probe = (hosts) => Promise.any(hosts.map((h) =>
+      fetch("https://basket-" + String(h).padStart(2, "0") + ".wbbasket.ru" + path)
+        .then((r) => (r.ok ? r.json() : Promise.reject()))));
+    try {
+      const card = await probe(near).catch(() => probe(rest));
+      return String(card.imt_name || card.subj_name || "").trim().slice(0, 140);
+    } catch (e) {
+      return "";
+    }
   }
 
   /** Код кнопки «В вишлист» для панели закладок. */
@@ -1132,7 +1182,7 @@
     const priceOld = rawOld ? parsePrice(rawOld) : null;
     setErr(f.url, rawUrl && !url ? "Нужна ссылка на страницу товара, например https://www.ozon.ru/product/…"
       : !item && url && state.items.some((i) => i.url === url) ? "Этот товар уже есть в списке" : "");
-    setErr(f.title, title ? "" : "Напиши, что это за подарок");
+    setErr(f.title, title || url ? "" : "Напиши, что это за подарок, или вставь ссылку");
     setErr(f.price, rawPrice && price == null ? "Укажи цену числом, например 4990" : "");
     setErr(f.priceOld, rawOld && priceOld == null ? "Укажи цену числом, например 5990"
       : priceOld != null && price == null ? "Сначала укажи цену со скидкой"
