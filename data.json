@@ -1,6 +1,6 @@
 {
   "title": "Мой вишлист",
-  "checkedAt": "2026-10-03T20:46:03Z",
+  "checkedAt": "2026-10-03T20:46:56Z",
   "items": [
     {
       "id": "wmurni79h1r19",
@@ -9,7 +9,7 @@
       "platform": "",
       "price": 2845,
       "priceOld": 3161,
-      "priceAt": "2026-10-03T20:46:03Z",
+      "priceAt": "2026-10-03T20:46:56Z",
       "pricePrev": 2902,
       "priceChangedAt": "2026-10-03T20:46:03Z",
       "note": "",
@@ -19,7 +19,7 @@
       "addedAt": "2026-10-03T00:25:47.333Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T20:46:03Z",
+        "at": "2026-10-03T20:46:56Z",
         "note": ""
       }
     },
@@ -30,7 +30,7 @@
       "platform": "",
       "price": 3097,
       "priceOld": 3441,
-      "priceAt": "2026-10-03T20:46:03Z",
+      "priceAt": "2026-10-03T20:46:56Z",
       "pricePrev": 3075,
       "priceChangedAt": "2026-10-03T20:46:03Z",
       "note": "",
@@ -40,7 +40,7 @@
       "addedAt": "2026-10-03T00:26:16.529Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T20:46:03Z",
+        "at": "2026-10-03T20:46:56Z",
         "note": ""
       }
     },
@@ -51,7 +51,7 @@
       "platform": "",
       "price": 721,
       "priceOld": 2486,
-      "priceAt": "2026-10-03T20:46:03Z",
+      "priceAt": "2026-10-03T20:46:56Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -61,7 +61,7 @@
       "addedAt": "2026-10-03T00:26:47.436Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T20:46:03Z",
+        "at": "2026-10-03T20:46:56Z",
         "note": ""
       }
     }
