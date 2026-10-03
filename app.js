@@ -666,7 +666,7 @@
     else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Кабинет владельца");
     return el("footer", { class: "foot" },
       FB && !canEdit ? el("p", { class: "foot-lead" }, "Хочешь что-то подарить? Войди и нажми «Подарю я» у товара: бронь увидят все, и никто не купит этот подарок второй раз.") : null,
-      el("p", null, "Цены и карточки товаров обновляются каждый день с 18:52 по Москве, обычно за 5–25 минут. " + last),
+      el("p", null, "Цены и карточки товаров обновляются каждый день с 18:50 до 19:30 МСК (UTC+3). " + last),
       canEdit ? quickAdd() : null,
       action ? el("p", { class: "foot-actions" }, action) : null);
   }
@@ -1004,7 +1004,7 @@
     };
     const hint = el("p", { class: "hint", hidden: true });
     f.price.wrap.append(hint);
-    const tHint = el("p", { class: "hint muted", hidden: true }, "Название и цену подставит проверка в 18:52 по Москве");
+    const tHint = el("p", { class: "hint muted", hidden: true }, "Название и цену подставит проверка с 18:50 до 19:30 МСК");
     f.title.wrap.append(tHint);
     const syncTitleHint = () => {
       tHint.hidden = !cleanUrl(f.url.input.value) || !!f.title.input.value.trim();
@@ -1015,7 +1015,7 @@
       hint.textContent = "Цена со страницы товара";
       hint.hidden = false;
     } else if (isNew && prefill && v.url && v.title) {
-      hint.textContent = "Можно оставить пустой: цену подставит проверка в 18:52 по Москве";
+      hint.textContent = "Можно оставить пустой: цену подставит проверка с 18:50 до 19:30 МСК";
       hint.hidden = false;
     }
     let lookupTimer = null;
