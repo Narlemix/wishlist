@@ -727,6 +727,7 @@
         const code = err && err.code;
         if (code === "name-taken") setErr(name, "Это имя уже занято, выбери другое");
         else if (code === "no-profile") setErr(name, "Аккаунт найден, но без профиля. Зарегистрируйся заново под другим именем");
+        else if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") setErr(pass, "Вход на сайте пока не включён. Напиши владельцу списка");
         else if (code === "auth/too-many-requests") setErr(pass, "Слишком много попыток. Подожди пару минут");
         else if (code === "auth/network-request-failed" || code === "unavailable") setErr(pass, "Нет связи с сервером. Проверь интернет");
         else if (isReg) setErr(pass, "Не получилось зарегистрироваться. Попробуй ещё раз");
