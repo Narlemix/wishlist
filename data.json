@@ -4,8 +4,8 @@
   "items": [
     {
       "id": "wmurmku77ouky",
-      "gifted": true,
-      "giftedAt": "2026-10-02T23:59:54.872Z",
+      "gifted": false,
+      "giftedAt": null,
       "addedAt": "2026-10-02T23:59:50.755Z",
       "check": null,
       "title": "Электрическая отвёртка",
