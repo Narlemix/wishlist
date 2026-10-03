@@ -4,6 +4,7 @@
   const CONFIG = repoConfig();
   const API = "https://api.github.com/repos/" + CONFIG.owner + "/" + CONFIG.repo + "/contents/data.json";
   const TOKEN_KEY = "wishlist-token";
+  const GH_TIMEOUT = 15000;
   const TABS = [["all", "Все"], ["free", "Свободные"], ["want", "Ждут подарка"], ["gifted", "Подарено"], ["gone", "Не работают"]];
   const GUEST_DOMAIN = "@guest.narlemix.github.io";
   const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} ._-]*[\p{L}\p{N}]$/u;
@@ -144,6 +145,7 @@
 
   /** Загружает список: владельцу свежий из GitHub, остальным с сайта. */
   async function boot() {
+    let ghFailed = null;
     if (token) {
       try {
         await loadRemote();
@@ -152,6 +154,8 @@
         if (e.status === 401) {
           dropToken();
           showToast("Токен больше не действует. Войди заново", 6000);
+        } else {
+          ghFailed = e;
         }
       }
     }
@@ -163,7 +167,10 @@
       }
     }
     loaded = true;
-    if (prefill) {
+    if (ghFailed) {
+      showToast((ghFailed.timeout ? "GitHub не ответил за " + GH_TIMEOUT / 1000 + " секунд" : "Нет связи с GitHub")
+        + ". Список открыт для просмотра, кабинет пока недоступен", 0, { label: "Повторить", fn: retryCabinet });
+    } else if (prefill) {
       if (canEdit) editing = "new";
       else {
         loggingIn = true;
@@ -171,6 +178,27 @@
       }
     }
     render();
+  }
+
+  /** Повторно подключает кабинет владельца после сбоя связи с GitHub. */
+  async function retryCabinet() {
+    showToast("Подключаюсь к GitHub…");
+    try {
+      await loadRemote();
+      canEdit = true;
+      loadFailed = false;
+      if (prefill) editing = "new";
+      render();
+      showToast("Кабинет подключён", 2500);
+    } catch (e) {
+      if (e.status === 401) {
+        dropToken();
+        render();
+        showToast("Токен больше не действует. Войди заново", 6000);
+      } else {
+        showToast((e.timeout ? "GitHub снова не ответил" : "Нет связи с GitHub") + ". Проверь интернет или VPN", 0, { label: "Повторить", fn: retryCabinet });
+      }
+    }
   }
 
   /** Данные товара из кнопки «В вишлист» или из «Поделиться» на телефоне. */
@@ -201,7 +229,7 @@
 
   /** Читает data.json, опубликованный на сайте. */
   async function loadPublic() {
-    const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
+    const r = await timedFetch("data.json?t=" + Date.now(), { cache: "no-store" }, GH_TIMEOUT);
     if (!r.ok) throw httpError(r);
     state = normalize(await r.json());
   }
@@ -250,7 +278,7 @@
         showToast("Не получилось сохранить, ошибка GitHub " + r.status, 0, retry);
       }
     } catch (e) {
-      showToast("Не получилось сохранить. Проверь интернет", 0, retry);
+      showToast(e.timeout ? "GitHub не ответил за " + GH_TIMEOUT / 1000 + " секунд, изменение не сохранено" : "Не получилось сохранить. Проверь интернет или VPN", 0, retry);
     } finally {
       busy = false;
     }
@@ -285,7 +313,25 @@
   function gh(method, url, body) {
     const headers = { Accept: "application/vnd.github+json", Authorization: "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28" };
     if (body) headers["Content-Type"] = "application/json";
-    return fetch(url, { method: method, cache: "no-store", headers: headers, body: body ? JSON.stringify(body) : undefined });
+    return timedFetch(url, { method: method, cache: "no-store", headers: headers, body: body ? JSON.stringify(body) : undefined }, GH_TIMEOUT);
+  }
+
+  /** Запрос с ограничением по времени: зависший ответ превращается в ошибку с флагом timeout. */
+  async function timedFetch(url, opts, ms) {
+    const ctl = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
+    try {
+      return await fetch(url, Object.assign({}, opts, ctl ? { signal: ctl.signal } : {}));
+    } catch (e) {
+      if (ctl && ctl.signal.aborted) {
+        const err = new Error("timeout");
+        err.timeout = true;
+        throw err;
+      }
+      throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /** Ошибка с HTTP-статусом ответа. */
@@ -720,7 +766,8 @@
         submit.disabled = false;
         setErr(f, err.status === 401 ? "GitHub не принял токен. Проверь, что он скопирован целиком"
           : err.status === 404 ? "Токен не видит репозиторий " + CONFIG.owner + "/" + CONFIG.repo
-          : "Не получилось проверить токен. Проверь интернет");
+          : err.timeout ? "GitHub не ответил за " + GH_TIMEOUT / 1000 + " секунд. Проверь интернет или VPN и попробуй ещё раз"
+          : "Не получилось проверить токен. Проверь интернет или VPN");
       }
     });
     focusLater(f.input);
