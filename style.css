@@ -74,6 +74,9 @@ a.name:hover{text-decoration:underline;text-decoration-thickness:1px;text-underl
 .side{display:grid;justify-items:end;gap:6px}
 .price{padding-top:1px;font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
 .is-gifted .price{color:var(--faint)}
+.delta{padding:0 7px;border-radius:999px;font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums;white-space:nowrap}
+.delta.down{color:var(--gift);background:var(--gift-bg)}
+.delta.up{color:var(--warn);background:var(--warn-bg)}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13px;color:var(--muted)}
 .meta:empty{display:none}
 .platform{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase}

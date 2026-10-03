@@ -150,7 +150,12 @@
     const remote = new Map(state.items.map((i) => [i.id, i]));
     local.items.forEach((i) => {
       const r = remote.get(i.id);
-      if (r && r.url === i.url) i.check = r.check;
+      if (r && r.url === i.url) {
+        i.check = r.check;
+        if (r.priceAt && r.priceAt !== i.priceAt) {
+          Object.assign(i, { price: r.price, priceAt: r.priceAt, pricePrev: r.pricePrev, priceChangedAt: r.priceChangedAt });
+        }
+      }
     });
     local.checkedAt = state.checkedAt || local.checkedAt;
     state = local;
@@ -197,6 +202,9 @@
         url: cleanUrl(i.url),
         platform: String(i.platform || "").slice(0, 40),
         price: typeof i.price === "number" && isFinite(i.price) ? i.price : null,
+        priceAt: typeof i.priceAt === "string" ? i.priceAt : null,
+        pricePrev: typeof i.pricePrev === "number" && isFinite(i.pricePrev) ? i.pricePrev : null,
+        priceChangedAt: typeof i.priceChangedAt === "string" ? i.priceChangedAt : null,
         note: String(i.note || "").slice(0, 200),
         priority: PRIORITIES.some(([p]) => p === i.priority) ? i.priority : DEFAULT_PRIORITY,
         gifted: !!i.gifted,
@@ -349,8 +357,21 @@
       gift,
       el("div", { class: "body" }, name, meta),
       el("div", { class: "side" },
-        el("span", { class: "price" }, item.price != null ? fmtPrice(item.price) : ""),
+        el("span", { class: "price", title: item.priceAt ? "Цена с маркетплейса на " + fmtDate(item.priceAt, true) : null }, item.price != null ? fmtPrice(item.price) : ""),
+        priceDelta(item),
         interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null));
+  }
+
+  /** Бейдж изменения цены за последние 30 дней. */
+  function priceDelta(item) {
+    if (item.gifted || item.price == null || item.pricePrev == null || item.pricePrev === item.price || !item.priceChangedAt) return null;
+    const when = new Date(item.priceChangedAt).getTime();
+    if (!isFinite(when) || Date.now() - when > 30 * 864e5) return null;
+    const diff = item.price - item.pricePrev;
+    return el("span", {
+      class: "delta " + (diff < 0 ? "down" : "up"),
+      title: "Было " + fmtPrice(item.pricePrev) + ", цена изменилась " + fmtDate(item.priceChangedAt, false)
+    }, (diff < 0 ? "↓ " : "↑ ") + fmtPrice(Math.abs(diff)));
   }
 
   /** Метка важности: шкала из пяти делений и подпись. */
@@ -393,7 +414,7 @@
     if (canEdit) action = el("button", { type: "button", class: "foot-btn", onclick: logout }, "Выйти из режима редактирования");
     else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Вход для владельца");
     return el("footer", { class: "foot" },
-      el("p", null, "Ссылки проверяются автоматически раз в день. " + last),
+      el("p", null, "Ссылки и цены проверяются автоматически раз в день. " + last),
       action ? el("p", { class: "foot-actions" }, action) : null);
   }
 
@@ -465,7 +486,7 @@
     const f = {
       url: field("f-url", "Ссылка", v.url || "", "https://www.ozon.ru/product/…", { inputmode: "url", autocomplete: "off", spellcheck: "false" }),
       title: field("f-title", "Название", v.title || "", "Что хочется получить", { maxlength: "140" }),
-      price: field("f-price", "Цена, ₽", v.price != null ? String(v.price) : "", "Необязательно", { inputmode: "decimal", autocomplete: "off" }),
+      price: field("f-price", "Цена, ₽", v.price != null ? String(v.price) : "", "Подтянется по ссылке", { inputmode: "decimal", autocomplete: "off" }),
       platform: field("f-platform", "Площадка", v.platform || "", detectPlatform(v.url) || "Определится по ссылке", { maxlength: "40" }),
       note: field("f-note", "Заметка", v.note || "", "Размер, цвет, модель", { maxlength: "200" })
     };
@@ -543,10 +564,15 @@
     if (item) {
       const it = state.items.find((i) => i.id === item.id);
       if (!it) return closeForm();
-      if (it.url !== data.url) it.check = null;
+      if (it.url !== data.url) {
+        it.check = null;
+        Object.assign(it, { priceAt: null, pricePrev: null, priceChangedAt: null });
+      } else if (it.price !== data.price) {
+        Object.assign(it, { pricePrev: null, priceChangedAt: null });
+      }
       Object.assign(it, data);
     } else {
-      state.items.push(Object.assign({ id: newId(), gifted: false, giftedAt: null, addedAt: new Date().toISOString(), check: null }, data));
+      state.items.push(Object.assign({ id: newId(), gifted: false, giftedAt: null, addedAt: new Date().toISOString(), check: null, priceAt: null, pricePrev: null, priceChangedAt: null }, data));
       if (filter === "gifted" || filter === "gone") {
         filter = "all";
         storeFilter();
