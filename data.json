@@ -36,19 +36,19 @@
     },
     {
       "id": "wmurnjhn0xyyl",
-      "gifted": false,
-      "giftedAt": null,
-      "addedAt": "2026-10-03T00:26:47.436Z",
-      "check": null,
+      "title": "Галстук ld",
+      "url": "https://www.ozon.ru/product/galstuk-ld-2536182159/?at=1lyn1NImXwHf92iY7uMTSRXjIhBuCqSy&is_apparel_size_selected=true&sh=HHITQflDJA",
+      "platform": "",
+      "price": 789,
       "priceAt": null,
       "pricePrev": null,
       "priceChangedAt": null,
-      "title": "Галстук ld",
-      "url": "https://www.ozon.ru/product/galstuk-ld-2536182159/?at=1lyn1NImXwHf92iY7uMTSRXjIhBuCqSy&is_apparel_size_selected=true&sh=HHITQflDJA",
-      "price": 789,
+      "note": "",
       "priority": 4,
-      "platform": "",
-      "note": ""
+      "gifted": false,
+      "giftedAt": null,
+      "addedAt": "2026-10-03T00:26:47.436Z",
+      "check": null
     }
   ]
 }
