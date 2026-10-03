@@ -274,7 +274,9 @@
   /** Шапка: название списка, сводка и кнопка добавления. */
   function header() {
     return el("header", { class: "head" },
-      el("div", { class: "head-text" }, titleNode(), el("p", { class: "summary" }, loaded ? summaryText() : " ")),
+      el("div", { class: "head-text" },
+        el("div", { class: "ribbon", "aria-hidden": "true" }, [1, 2, 3, 4, 5].map((p) => el("i", { class: "p" + p }))),
+        titleNode(), el("p", { class: "summary" }, loaded ? summaryText() : "\u00a0")),
       canEdit && editing !== "new"
         ? el("button", { type: "button", class: "btn", onclick: () => openForm("new") }, "Добавить")
         : null);
@@ -368,7 +370,7 @@
     const inTab = state.items.filter(matchesTab);
     const chip = (p, label, n) => el("button", {
       type: "button",
-      class: "pf",
+      class: "pf" + (p ? " p" + p : ""),
       "aria-pressed": prioFilter === p ? "true" : "false",
       disabled: !n && prioFilter !== p,
       onclick: () => setPrioFilter(prioFilter === p ? 0 : p)
@@ -672,7 +674,7 @@
       el("div", { class: "prio-pick" }, PRIORITIES.map(([p, label]) => {
         const input = el("input", { type: "radio", name: "f-prio", id: "f-prio-" + p, value: String(p) });
         input.checked = p === current;
-        return [input, el("label", { for: "f-prio-" + p }, label)];
+        return [input, el("label", { for: "f-prio-" + p, class: "p" + p }, label)];
       })));
   }
 
