@@ -5,7 +5,9 @@
   const API = "https://api.github.com/repos/" + CONFIG.owner + "/" + CONFIG.repo + "/contents/data.json";
   const TOKEN_HELP = "https://github.com/settings/personal-access-tokens/new";
   const TOKEN_KEY = "wishlist-token";
-  const TABS = [["all", "Все"], ["want", "Ждут подарка"], ["gifted", "Подарено"], ["gone", "Не работают"]];
+  const TABS = [["all", "Все"], ["free", "Свободные"], ["want", "Ждут подарка"], ["gifted", "Подарено"], ["gone", "Не работают"]];
+  const GUEST_DOMAIN = "@guest.narlemix.github.io";
+  const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} ._-]*[\p{L}\p{N}]$/u;
   const PRIORITIES = [[1, "Очень нужно"], [2, "Нужно"], [3, "Хочу"], [4, "Было бы приятно"], [5, "Когда-нибудь"]];
   const DEFAULT_PRIORITY = 3;
   const PLATFORMS = [
@@ -57,12 +59,70 @@
   let filter = loadFilter();
   let prioFilter = loadPrioFilter();
   let prefill = readPrefill();
+  const FB = initFirebase();
+  let guest = null;
+  let guestReady = !FB;
+  let registering = false;
+  let reservations = {};
+  let reserving = {};
+  let authMode = null;
+  let pendingReserve = null;
 
   render();
   boot();
+  bootGuests();
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && saveTimer) save();
   });
+
+  /** Подключает Firebase, если на сайте заданы его настройки. */
+  function initFirebase() {
+    const cfg = window.WISHLIST_FIREBASE;
+    if (!cfg || !cfg.apiKey || !window.firebase) return null;
+    try {
+      firebase.initializeApp(cfg);
+      return { auth: firebase.auth(), db: firebase.firestore(), fv: firebase.firestore.FieldValue };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Следит за входом гостя и за бронями в реальном времени. */
+  function bootGuests() {
+    if (!FB) return;
+    FB.db.collection("reservations").onSnapshot((snap) => {
+      const next = {};
+      snap.forEach((d) => {
+        const v = d.data() || {};
+        if (v.uid && v.name) next[d.id] = { uid: String(v.uid), name: String(v.name) };
+      });
+      reservations = next;
+      softRender();
+    }, () => {});
+    FB.auth.onAuthStateChanged(async (user) => {
+      if (registering) return;
+      guest = user ? await loadGuest(user) : null;
+      guestReady = true;
+      softRender();
+    });
+  }
+
+  /** Профиль гостя из базы; без профиля вход не засчитывается. */
+  async function loadGuest(user) {
+    try {
+      const doc = await FB.db.collection("users").doc(user.uid).get();
+      const name = doc.exists ? String((doc.data() || {}).name || "") : "";
+      return name ? { uid: user.uid, name: name } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Перерисовка, которая не сбрасывает открытую форму. */
+  function softRender() {
+    if (editing || renaming || authMode || loggingIn) return;
+    render();
+  }
 
   /** Загружает список: владельцу свежий из GitHub, остальным с сайта. */
   async function boot() {
@@ -262,8 +322,10 @@
       listNode = editing === "new" ? null : emptyState();
     }
     app.replaceChildren(...[
+      canEdit ? cabinetBar() : null,
       header(),
       loggingIn && !canEdit ? loginPanel() : null,
+      authMode && !canEdit ? authPanel() : null,
       editing === "new" ? form(null) : null,
       tabsNode,
       listNode,
@@ -271,15 +333,38 @@
     ].filter(Boolean));
   }
 
-  /** Шапка: название списка, сводка и кнопка добавления. */
+  /** Полоса кабинета владельца над страницей. */
+  function cabinetBar() {
+    return el("div", { class: "cabinet-bar" },
+      el("span", { class: "cabinet-title" }, "Кабинет владельца"),
+      el("span", { class: "cabinet-text" }, "Здесь ты добавляешь, меняешь и удаляешь товары и отмечаешь подаренное. Гости видят список и могут только забронировать подарок."),
+      el("button", { type: "button", class: "cabinet-out", onclick: logout }, "Выйти"));
+  }
+
+  /** Шапка: название списка, сводка и кнопки владельца или гостя. */
   function header() {
     return el("header", { class: "head" },
       el("div", { class: "head-text" },
         el("div", { class: "ribbon", "aria-hidden": "true" }, [1, 2, 3, 4, 5].map((p) => el("i", { class: "p" + p }))),
-        titleNode(), el("p", { class: "summary" }, loaded ? summaryText() : "\u00a0")),
-      canEdit && editing !== "new"
-        ? el("button", { type: "button", class: "btn", onclick: () => openForm("new") }, "Добавить")
-        : null);
+        titleNode(), el("p", { class: "summary" }, loaded ? summaryText() : " ")),
+      headerActions());
+  }
+
+  /** Кнопки справа в шапке. */
+  function headerActions() {
+    if (canEdit) {
+      return editing !== "new" ? el("button", { type: "button", class: "btn", onclick: () => openForm("new") }, "Добавить") : null;
+    }
+    if (!FB || !guestReady) return null;
+    if (guest) {
+      return el("div", { class: "who" },
+        el("span", { class: "who-name" }, guest.name),
+        el("button", { type: "button", class: "link-btn", onclick: guestLogout }, "Выйти"));
+    }
+    if (authMode) return null;
+    return el("div", { class: "who" },
+      el("button", { type: "button", class: "btn ghost", onclick: () => openAuth("login") }, "Войти"),
+      el("button", { type: "button", class: "btn", onclick: () => openAuth("register") }, "Регистрация"));
   }
 
   /** Заголовок, который владелец может переименовать. */
@@ -323,6 +408,8 @@
     const rest = state.items.filter((i) => !i.gifted && i.price != null).reduce((a, i) => a + i.price, 0);
     const parts = [all + " " + plural(all, ["желание", "желания", "желаний"])];
     if (gifted) parts.push("подарено " + gifted);
+    const reserved = state.items.filter((i) => !i.gifted && reservations[i.id]).length;
+    if (reserved) parts.push("забронировано " + reserved);
     if (rest) parts.push((gifted ? "осталось на " : "на ") + fmtPrice(rest));
     return parts.join(" · ");
   }
@@ -331,13 +418,14 @@
   function tabs() {
     const counts = {
       all: state.items.length,
+      free: state.items.filter((i) => !i.gifted && !reservations[i.id]).length,
       want: state.items.filter((i) => !i.gifted).length,
       gifted: state.items.filter((i) => i.gifted).length,
       gone: state.items.filter(isGone).length
     };
-    if (filter === "gone" && !counts.gone) filter = "all";
+    if ((filter === "gone" && !counts.gone) || (filter === "free" && !FB)) filter = "all";
     return el("div", { class: "tabs", role: "tablist", "aria-label": "Фильтр списка" },
-      TABS.filter(([k]) => k !== "gone" || counts.gone).map(([k, label]) =>
+      TABS.filter(([k]) => (k !== "gone" || counts.gone) && (k !== "free" || FB)).map(([k, label]) =>
         el("button", {
           type: "button",
           role: "tab",
@@ -362,7 +450,8 @@
 
   /** Подходит ли товар под выбранную вкладку. */
   function matchesTab(i) {
-    return filter === "all" || (filter === "want" && !i.gifted) || (filter === "gifted" && i.gifted) || (filter === "gone" && isGone(i));
+    return filter === "all" || (filter === "free" && !i.gifted && !reservations[i.id]) || (filter === "want" && !i.gifted)
+      || (filter === "gifted" && i.gifted) || (filter === "gone" && isGone(i));
   }
 
   /** Ряд фильтров по важности с количеством товаров в текущей вкладке. */
@@ -404,15 +493,15 @@
     if (!preview && editing === item.id) return el("li", { class: "item is-editing" }, form(item));
     const interactive = canEdit && !preview;
     const platform = item.platform || detectPlatform(item.url);
-    const gift = el("button", {
+    const gift = canEdit || preview ? el("button", {
       type: "button",
       class: "gift",
       "aria-pressed": item.gifted ? "true" : "false",
       "aria-label": item.gifted ? "Подарено, снять отметку" : "Отметить как подаренное",
-      title: interactive ? (item.gifted ? "Снять отметку" : "Отметить как подаренное") : (item.gifted ? "Подарено" : null),
+      title: interactive ? (item.gifted ? "Снять отметку" : "Отметить как подаренное") : null,
       disabled: !interactive,
       onclick: () => toggleGift(item.id)
-    });
+    }) : null;
     const name = item.url
       ? el("a", { class: "name", href: item.url, target: "_blank", rel: "noopener noreferrer" }, item.title)
       : el("span", { class: "name" }, item.title);
@@ -420,14 +509,35 @@
       priorityChip(item.priority),
       platform ? el("span", { class: "platform" }, platform) : null,
       item.gifted ? el("span", { class: "mark gifted" }, "Подарено") : statusMark(item, preview),
+      preview ? null : reservationMark(item),
       item.note ? el("span", { class: "note" }, item.note) : null);
-    return el("li", { class: "item p" + item.priority + (item.gifted ? " is-gifted" : "") + (isGone(item) ? " is-gone" : "") },
+    return el("li", { class: "item p" + item.priority + (item.gifted ? " is-gifted" : "") + (isGone(item) ? " is-gone" : "") + (gift ? "" : " no-gift") },
       gift,
       el("div", { class: "body" }, name, meta),
       el("div", { class: "side" },
         el("span", { class: "price", title: item.priceAt ? "Цена с маркетплейса на " + fmtDate(item.priceAt, true) : null }, item.price != null ? fmtPrice(item.price) : ""),
         priceDelta(item),
-        interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null));
+        interactive ? el("button", { type: "button", class: "link-btn", onclick: () => openForm(item.id) }, "Изменить") : null,
+        preview ? null : guestAction(item)));
+  }
+
+  /** Плашка брони: кто собирается подарить этот товар. */
+  function reservationMark(item) {
+    const r = reservations[item.id];
+    if (!r) return null;
+    if (item.gifted) return el("span", { class: "mark res" }, "Подарок от " + r.name);
+    if (guest && r.uid === guest.uid && !canEdit) return el("span", { class: "mark res-mine" }, "Ты даришь это");
+    return el("span", { class: "mark res" }, "Хочет подарить " + r.name);
+  }
+
+  /** Кнопка гостя: забронировать подарок или отменить свою бронь. */
+  function guestAction(item) {
+    if (canEdit || !FB || item.gifted) return null;
+    const r = reservations[item.id];
+    if (reserving[item.id]) return el("span", { class: "res-wait" }, "Секунду…");
+    if (!r) return el("button", { type: "button", class: "btn sm reserve", onclick: () => reserve(item.id) }, "Подарю я");
+    if (guest && r.uid === guest.uid) return el("button", { type: "button", class: "link-btn", onclick: () => unreserve(item.id) }, "Отменить бронь");
+    return null;
   }
 
   /** Бейдж изменения цены за последние 30 дней. */
@@ -483,9 +593,10 @@
       ? "Последняя проверка: " + fmtDate(state.checkedAt, true) + "."
       : "Первой проверки ещё не было.";
     let action = null;
-    if (canEdit) action = el("button", { type: "button", class: "foot-btn", onclick: logout }, "Выйти из режима редактирования");
-    else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Вход для владельца");
+    if (canEdit) action = el("button", { type: "button", class: "foot-btn", onclick: logout }, "Выйти из кабинета");
+    else if (!loggingIn) action = el("button", { type: "button", class: "foot-btn", onclick: openLogin }, "Кабинет владельца");
     return el("footer", { class: "foot" },
+      FB && !canEdit ? el("p", { class: "foot-lead" }, "Хочешь что-то подарить? Войди и нажми «Подарю я» у товара: бронь увидят все, и никто не купит этот подарок второй раз.") : null,
       el("p", null, "Ссылки и цены проверяются автоматически раз в день. " + last),
       canEdit ? quickAdd() : null,
       action ? el("p", { class: "foot-actions" }, action) : null);
@@ -508,9 +619,9 @@
   function loginPanel() {
     const f = field("f-token", "Токен GitHub", "", "github_pat_…", { type: "password", autocomplete: "off", spellcheck: "false" });
     const submit = el("button", { type: "submit", class: "btn" }, "Войти");
-    const node = el("form", { class: "form", novalidate: true, "aria-label": "Вход для владельца" },
+    const node = el("form", { class: "form", novalidate: true, "aria-label": "Кабинет владельца" },
       el("div", { class: "form-head" },
-        el("p", { class: "form-title" }, "Вход для владельца"),
+        el("p", { class: "form-title" }, "Кабинет владельца"),
         el("p", { class: "form-text" }, "Вставь токен GitHub с доступом к репозиторию ", el("b", null, CONFIG.owner + "/" + CONFIG.repo),
           " и правом Contents: Read and write. Токен хранится только в этом браузере.")),
       f.wrap,
@@ -535,7 +646,7 @@
         loadFailed = false;
         if (prefill) editing = "new";
         render();
-        showToast("Готово, можно редактировать", 2500);
+        showToast("Ты в кабинете владельца", 2500);
       } catch (err) {
         token = null;
         submit.disabled = false;
@@ -548,9 +659,216 @@
     return node;
   }
 
+  /** Форма входа и регистрации гостя. */
+  function authPanel() {
+    const isReg = authMode === "register";
+    const name = field("f-gname", "Имя", "", "Как тебя зовут друзья", { maxlength: "20", autocomplete: "username", spellcheck: "false" });
+    const pass = field("f-gpass", "Пароль", "", isReg ? "Не короче 6 символов" : "", { type: "password", autocomplete: isReg ? "new-password" : "current-password" });
+    const pass2 = isReg ? field("f-gpass2", "Пароль ещё раз", "", "", { type: "password", autocomplete: "new-password" }) : null;
+    const ok = el("p", { class: "hint", hidden: true });
+    name.wrap.append(ok);
+    const submit = el("button", { type: "submit", class: "btn" }, isReg ? "Зарегистрироваться" : "Войти");
+    let checkTimer = null;
+    if (isReg) {
+      name.input.addEventListener("input", () => {
+        ok.hidden = true;
+        setErr(name, "");
+        clearTimeout(checkTimer);
+        checkTimer = setTimeout(async () => {
+          const n = cleanName(name.input.value);
+          if (!NAME_RE.test(n) || n.length < 2) return;
+          const taken = await nameTaken(n);
+          if (cleanName(name.input.value) !== n) return;
+          if (taken) setErr(name, "Это имя уже занято, выбери другое");
+          else if (taken === false) {
+            ok.textContent = "Имя свободно";
+            ok.hidden = false;
+          }
+        }, 400);
+      });
+    }
+    const node = el("form", { class: "form", novalidate: true, "aria-label": isReg ? "Регистрация" : "Вход" },
+      el("div", { class: "auth-tabs", role: "tablist" },
+        el("button", { type: "button", role: "tab", class: "auth-tab", "aria-selected": isReg ? "false" : "true", onclick: () => openAuth("login") }, "Вход"),
+        el("button", { type: "button", role: "tab", class: "auth-tab", "aria-selected": isReg ? "true" : "false", onclick: () => openAuth("register") }, "Регистрация")),
+      pendingReserve ? el("p", { class: "form-text" }, "Войди или зарегистрируйся, и подарок сразу забронируется за тобой.") : null,
+      name.wrap, pass.wrap, pass2 ? pass2.wrap : null,
+      isReg ? el("p", { class: "form-text" }, "Имя увидят все, кто откроет список. Почта не нужна, поэтому восстановить пароль не получится: запомни его.") : null,
+      el("div", { class: "actions" },
+        submit,
+        el("button", { type: "button", class: "btn ghost", onclick: closeAuth }, "Отмена")));
+    node.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const n = cleanName(name.input.value);
+      const pw = pass.input.value;
+      setErr(name, n.length < 2 || n.length > 20 ? "Имя должно быть от 2 до 20 символов"
+        : !NAME_RE.test(n) ? "Можно буквы, цифры, пробел, точку, дефис и подчёркивание" : "");
+      setErr(pass, pw.length < 6 ? "Пароль должен быть не короче 6 символов" : "");
+      if (pass2) setErr(pass2, pass2.input.value !== pw ? "Пароли не совпадают" : "");
+      const bad = [name, pass, pass2].filter(Boolean).find((x) => !x.err.hidden);
+      if (bad) {
+        bad.input.focus();
+        return;
+      }
+      submit.disabled = true;
+      try {
+        if (isReg) await registerGuest(n, pw);
+        else await loginGuest(n, pw);
+        authMode = null;
+        render();
+        showToast("Привет, " + guest.name + "!", 2500);
+        if (pendingReserve) {
+          const id = pendingReserve;
+          pendingReserve = null;
+          reserve(id);
+        }
+      } catch (err) {
+        submit.disabled = false;
+        const code = err && err.code;
+        if (code === "name-taken") setErr(name, "Это имя уже занято, выбери другое");
+        else if (code === "no-profile") setErr(name, "Аккаунт найден, но без профиля. Зарегистрируйся заново под другим именем");
+        else if (code === "auth/too-many-requests") setErr(pass, "Слишком много попыток. Подожди пару минут");
+        else if (code === "auth/network-request-failed" || code === "unavailable") setErr(pass, "Нет связи с сервером. Проверь интернет");
+        else if (isReg) setErr(pass, "Не получилось зарегистрироваться. Попробуй ещё раз");
+        else setErr(pass, "Неверное имя или пароль");
+      }
+    });
+    focusLater(name.input);
+    return node;
+  }
+
+  /** Открывает вход или регистрацию гостя. */
+  function openAuth(mode) {
+    authMode = mode;
+    loggingIn = false;
+    render();
+  }
+
+  /** Закрывает форму гостя. */
+  function closeAuth() {
+    authMode = null;
+    pendingReserve = null;
+    render();
+  }
+
+  /** Регистрирует гостя с уникальным именем. */
+  async function registerGuest(name, pw) {
+    const key = name.toLowerCase();
+    if (await nameTaken(name)) throw { code: "name-taken" };
+    registering = true;
+    try {
+      let cred;
+      try {
+        cred = await FB.auth.createUserWithEmailAndPassword(await nameEmail(key), pw);
+      } catch (e) {
+        throw e && e.code === "auth/email-already-in-use" ? { code: "name-taken" } : e;
+      }
+      const uid = cred.user.uid;
+      const batch = FB.db.batch();
+      batch.set(FB.db.collection("users").doc(uid), { name: name, key: key, createdAt: FB.fv.serverTimestamp() });
+      batch.set(FB.db.collection("usernames").doc(key), { uid: uid });
+      try {
+        await batch.commit();
+      } catch (e) {
+        try {
+          await cred.user.delete();
+        } catch (x) {}
+        throw { code: "name-taken" };
+      }
+      guest = { uid: uid, name: name };
+      guestReady = true;
+    } finally {
+      registering = false;
+    }
+  }
+
+  /** Входит гостем по имени и паролю. */
+  async function loginGuest(name, pw) {
+    const cred = await FB.auth.signInWithEmailAndPassword(await nameEmail(name.toLowerCase()), pw);
+    const g = await loadGuest(cred.user);
+    if (!g) {
+      await FB.auth.signOut();
+      throw { code: "no-profile" };
+    }
+    guest = g;
+    guestReady = true;
+  }
+
+  /** Выходит из аккаунта гостя. */
+  async function guestLogout() {
+    try {
+      await FB.auth.signOut();
+    } catch (e) {}
+    guest = null;
+    render();
+  }
+
+  /** Занято ли имя: true, false или null, если проверить не удалось. */
+  async function nameTaken(name) {
+    try {
+      const doc = await FB.db.collection("usernames").doc(name.toLowerCase()).get();
+      return doc.exists;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Служебная почта для входа, однозначно выведенная из имени. */
+  async function nameEmail(key) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+    const hex = Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+    return "u" + hex.slice(0, 40) + GUEST_DOMAIN;
+  }
+
+  /** Убирает лишние пробелы в имени. */
+  function cleanName(s) {
+    return String(s || "").replace(/\s+/g, " ").trim();
+  }
+
+  /** Бронирует товар за текущим гостем. */
+  async function reserve(id) {
+    if (!FB || canEdit) return;
+    if (!guest) {
+      pendingReserve = id;
+      openAuth("login");
+      return;
+    }
+    if (reservations[id] || reserving[id]) return;
+    reserving[id] = true;
+    render();
+    try {
+      await FB.db.collection("reservations").doc(id).set({ uid: guest.uid, name: guest.name, at: FB.fv.serverTimestamp() });
+      reservations[id] = { uid: guest.uid, name: guest.name };
+      showToast("Готово, теперь все видят, что этот подарок за тобой", 3500);
+    } catch (e) {
+      showToast(e && e.code === "permission-denied" ? "Этот подарок уже забронировал кто-то другой" : "Не получилось забронировать. Попробуй ещё раз", 5000);
+    } finally {
+      delete reserving[id];
+      softRender();
+    }
+  }
+
+  /** Снимает свою бронь. */
+  async function unreserve(id) {
+    if (!FB || !guest) return;
+    reserving[id] = true;
+    render();
+    try {
+      await FB.db.collection("reservations").doc(id).delete();
+      delete reservations[id];
+      showToast("Бронь снята", 2500);
+    } catch (e) {
+      showToast("Не получилось снять бронь. Попробуй ещё раз", 5000);
+    } finally {
+      delete reserving[id];
+      softRender();
+    }
+  }
+
   /** Открывает форму входа. */
   function openLogin() {
     loggingIn = true;
+    authMode = null;
     editing = null;
     render();
   }
