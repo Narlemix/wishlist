@@ -1,17 +1,17 @@
 {
   "title": "Мой вишлист",
-  "checkedAt": "2026-10-03T20:46:56Z",
+  "checkedAt": "2026-10-04T15:54:47Z",
   "items": [
     {
       "id": "wmurni79h1r19",
       "title": "Электрическая отвертка Xiaomi аккумуляторная 24в1 Electric Screwdriver набор для точных работ в кейсе",
       "url": "https://www.ozon.ru/product/elektricheskaya-otvertka-xiaomi-akkumulyatornaya-24v1-electric-screwdriver-nabor-dlya-tochnyh-rabot-1716822822/?at=1lyn1Ye4y4QIc_0MmVgkFhIWJFXhgJe9&is_apparel_size_selected=true&sh=HHITQflDJA",
       "platform": "",
-      "price": 2845,
-      "priceOld": 3161,
-      "priceAt": "2026-10-03T20:46:56Z",
-      "pricePrev": 2902,
-      "priceChangedAt": "2026-10-03T20:46:03Z",
+      "price": 2907,
+      "priceOld": 3230,
+      "priceAt": "2026-10-04T15:54:47Z",
+      "pricePrev": 2845,
+      "priceChangedAt": "2026-10-04T15:54:47Z",
       "note": "",
       "priority": 3,
       "gifted": false,
@@ -19,7 +19,7 @@
       "addedAt": "2026-10-03T00:25:47.333Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T20:46:56Z",
+        "at": "2026-10-04T15:54:47Z",
         "note": ""
       }
     },
@@ -28,11 +28,11 @@
       "title": "Сумка дорожная коричневая, сумка спортивная через плечо для тренировок",
       "url": "https://www.ozon.ru/product/sumka-dorozhnaya-korichnevaya-sumka-sportivnaya-cherez-plecho-dlya-trenirovok-1318735751/?at=1lyn1MZUICRCECCvBFMd5F8nrxdKSPgH&is_apparel_size_selected=true&sh=HHITQflDJA",
       "platform": "",
-      "price": 3097,
-      "priceOld": 3441,
-      "priceAt": "2026-10-03T20:46:56Z",
-      "pricePrev": 3075,
-      "priceChangedAt": "2026-10-03T20:46:03Z",
+      "price": 3167,
+      "priceOld": 3519,
+      "priceAt": "2026-10-04T15:54:47Z",
+      "pricePrev": 3097,
+      "priceChangedAt": "2026-10-04T15:54:47Z",
       "note": "",
       "priority": 4,
       "gifted": false,
@@ -40,7 +40,7 @@
       "addedAt": "2026-10-03T00:26:16.529Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T20:46:56Z",
+        "at": "2026-10-04T15:54:47Z",
         "note": ""
       }
     },
@@ -51,7 +51,7 @@
       "platform": "",
       "price": 721,
       "priceOld": 2486,
-      "priceAt": "2026-10-03T20:46:56Z",
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -61,7 +61,7 @@
       "addedAt": "2026-10-03T00:26:47.436Z",
       "check": {
         "status": "ok",
-        "at": "2026-10-03T20:46:56Z",
+        "at": "2026-10-04T15:54:47Z",
         "note": ""
       }
     },
@@ -70,9 +70,9 @@
       "title": "PlayStation 5 DualSense Midnight Black Беспроводной геймпад",
       "url": "https://www.ozon.ru/product/playstation-5-dualsense-midnight-black-besprovodnoy-geympad-267455622/?at=1mSn1VWZwfCFCdwffwqX8G2oyFHhrLhX&is_apparel_size_selected=true&sh=HHITQSoOMA",
       "platform": "",
-      "price": 6773,
+      "price": 6774,
       "priceOld": 9190,
-      "priceAt": null,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -80,7 +80,11 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:14:33.607Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmusw4irpc1fx",
@@ -89,7 +93,7 @@
       "platform": "",
       "price": 31035,
       "priceOld": 32614,
-      "priceAt": null,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -97,16 +101,20 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:14:51.781Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmusw64bdyblq",
       "title": "Лобзик 650Вт - ход-23мм Makita JV0600K",
       "url": "https://www.ozon.ru/product/lobzik-650vt-hod-23mm-makita-jv0600k-550872746/?at=1mSn1-Mz4ppxJW3Y_-rznhisk07m7eD1&sh=HHITQSoOMA",
       "platform": "",
-      "price": 13623,
-      "priceOld": 24278,
-      "priceAt": null,
+      "price": 13642,
+      "priceOld": 24681,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -114,16 +122,20 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:16:06.361Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmusw73azt0dx",
       "title": "Дисковая циркулярная пила ф165х20мм - 1050Вт Makita HS6601",
       "url": "https://www.ozon.ru/product/diskovaya-tsirkulyarnaya-pila-f165h20mm-1050vt-makita-hs6601-527733441/?at=1mSn1QSRiZpHwrvnhJlJetCzSS_4DIv-&sh=HHITQSoOMA",
       "platform": "",
-      "price": 12210,
-      "priceOld": 13405,
-      "priceAt": null,
+      "price": 12052,
+      "priceOld": 13314,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -131,16 +143,20 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:16:51.707Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmusw8mni7o7z",
       "title": "Электрическая отвёртка Xiaomi Duka ATuMan E3 95в1 с набором бит для точных работ",
       "url": "https://www.ozon.ru/product/elektricheskaya-otvertka-xiaomi-duka-atuman-e3-95v1-s-naborom-bit-dlya-tochnyh-rabot-5837124674/?at=1mSn1Z3HvWINYogezY0E5IuKm1hr3FS1&sh=HHITQSoOMA",
       "platform": "",
-      "price": 3498,
+      "price": 3522,
       "priceOld": 7800,
-      "priceAt": null,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -148,16 +164,20 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:18:03.438Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmuswca7ub6io",
       "title": "Лазерный уровень строительный профессиональный 360 градусов 4D 16 линий, зеленый луч, нивелир профессиональный, АКБ со штативом и пультом уп",
       "url": "https://www.ozon.ru/product/lazernyy-uroven-stroitelnyy-professionalnyy-360-gradusov-4d-16-liniy-zelenyy-luch-5073472263/?at=1mSn1M1wmRNETMKGWpETc8GR6yaOHlQL&from_sku=5073472263&oos_search=false&sh=HHITQSm5mw",
       "platform": "",
-      "price": 6490,
-      "priceOld": 7211,
-      "priceAt": null,
+      "price": 6825,
+      "priceOld": 50000,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -165,16 +185,20 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:20:53.946Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmusx4k3hwo0n",
       "title": "Электронная ударная установка ON Music Rock Debut, черная",
       "url": "https://www.ozon.ru/product/elektronnaya-udarnaya-ustanovka-on-music-rock-debut-chernaya-4760428331/?at=1mSn1RwC9PtNsXQCxl7bY7ttG44mdeKR&from_sku=4760428331&oos_search=false&sh=HHITQXj8sg",
       "platform": "",
-      "price": 30021,
-      "priceOld": 33356,
-      "priceAt": null,
+      "price": 30105,
+      "priceOld": 33450,
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "note": "",
@@ -182,20 +206,28 @@
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:42:53.117Z",
-      "check": null
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      }
     },
     {
       "id": "wmusxccliu4py",
       "gifted": false,
       "giftedAt": null,
       "addedAt": "2026-10-03T21:48:56.646Z",
-      "check": null,
-      "priceAt": null,
+      "check": {
+        "status": "ok",
+        "at": "2026-10-04T15:54:47Z",
+        "note": ""
+      },
+      "priceAt": "2026-10-04T15:54:47Z",
       "pricePrev": null,
       "priceChangedAt": null,
       "title": "Ледогенератор 12 кг/сут с внутренней подсветкой, Tuvio TIM01B, серый, Яндекс Фабрика",
       "url": "https://www.ozon.ru/product/ledogenerator-12-kg-sut-s-vnutrenney-podsvetkoy-tuvio-tim01b-seryy-yandeks-fabrika-3159312481/?at=1mSn1Y9fMhAyVytISvftP-oumRVwHUb4&sh=HHITQXj8sg",
-      "price": 9140,
+      "price": 9050,
       "priceOld": 22535,
       "priority": 4,
       "platform": "",
