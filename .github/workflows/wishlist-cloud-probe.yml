@@ -1,0 +1,99 @@
+name: Wishlist cloud probe
+on:
+  push:
+    branches: [codex/wishlist-cloud-probe]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/wishlist-probe" --no-audit --no-fund playwright@1.58.2
+          "$RUNNER_TEMP/wishlist-probe/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Inspect public Ozon product pages
+        env:
+          NODE_PATH: ${{ runner.temp }}/wishlist-probe/node_modules
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { chromium } = require('playwright');
+          const items = JSON.parse(fs.readFileSync('data.json', 'utf8')).items
+            .filter(item => item.url && item.gifted === false);
+          function isOzon(url) {
+            return url.protocol === 'https:' &&
+              (url.hostname === 'ozon.ru' || url.hostname.endsWith('.ozon.ru'));
+          }
+          async function inspect(browser, item, index) {
+            const url = new URL(item.url);
+            if (!isOzon(url)) return { item: index, result: 'outside Ozon probe' };
+            const context = await browser.newContext({ serviceWorkers: 'block' });
+            try {
+              await context.route('**/*', route => {
+                const host = new URL(route.request().url());
+                const allowed = isOzon(host) || (host.protocol === 'https:' &&
+                  (host.hostname === 'ozone.ru' || host.hostname.endsWith('.ozone.ru')));
+                return allowed ? route.continue() : route.abort();
+              });
+              const page = await context.newPage();
+              const response = await page.goto(url.href, {
+                waitUntil: 'domcontentloaded',
+                timeout: 25000
+              });
+              await page.waitForFunction(() => {
+                const text = document.body?.innerText || '';
+                return /₽|капча|подтвердите, что вы не робот|antibot/i.test(document.title + ' ' + text);
+              }, null, { timeout: 7000 }).catch(() => {});
+              const signals = await page.evaluate(() => {
+                const main = document.querySelector('main') || document.body;
+                const text = main?.innerText || '';
+                const priceWidgets = Array.from(document.querySelectorAll('[data-widget]'))
+                  .filter(node => /^(webPrice|webProductPrice|webCurrentPrice)$/i.test(node.getAttribute('data-widget')));
+                const priceText = priceWidgets.map(node => node.innerText).join('\n');
+                const values = (priceText.match(/\d[\d\s\u00a0]*₽/g) || []).map(price => price.replace(/\D/g, ''));
+                return {
+                  blocked: /antibot|captcha|капча|подтвердите, что вы не робот|доступ ограничен/i
+                    .test(document.title + ' ' + text.slice(0, 2000)) ||
+                    /captcha|challenge|punish/i.test(location.pathname),
+                  productUrl: /\/product\//.test(location.pathname),
+                  heading: Boolean(document.querySelector('h1')?.innerText.trim()),
+                  soldOutText: /нет в наличии|товар закончился|снят с продажи|товар не найден/i.test(text.slice(0, 4000)),
+                  distinctPricesInWidget: new Set(values).size
+                };
+              });
+              return { item: index, http: response?.status() ?? null, ...signals };
+            } catch (error) {
+              return { item: index, result: error.name === 'TimeoutError' ? 'timeout' : 'navigation error' };
+            } finally {
+              await context.close();
+            }
+          }
+          (async () => {
+            const browser = await chromium.launch();
+            try {
+              const rows = [];
+              for (let start = 0; start < items.length; start += 5) {
+                rows.push(...await Promise.all(items.slice(start, start + 5)
+                  .map((item, offset) => inspect(browser, item, start + offset + 1))));
+              }
+              console.table(rows);
+              const readable = rows.filter(row => !row.blocked && row.productUrl && row.heading).length;
+              const twoPrices = rows.filter(row => !row.blocked && row.productUrl &&
+                row.heading && row.distinctPricesInWidget >= 2).length;
+              const summary = 'Links: ' + rows.length + ' | Readable product pages: ' + readable +
+                ' | Two distinct prices in product widget: ' + twoPrices + '\n';
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+              console.log(summary);
+            } finally {
+              await browser.close();
+            }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          NODE
