@@ -101,5 +101,14 @@
       "title": "Xiaomi 23.8\" Монитор Xiaomi G24Q 2026 (P24QEA-RG) Fast-IPS, QHD, 180Гц, 1 мс, DisplayHDR 400, 10 бит, 1,07 млрд цветов, FreeSync, TÜV Rheinl",
       "reason": "Короткая ссылка ведёт на поиск Ozon. Плашка исходного предложения с названием товара сообщает «Товар закончился». Отдельная карточка не открылась."
     }
-  ]
+  ],
+  "scheduledAttempt": {
+    "at": "2026-11-26T15:50:34.263Z",
+    "status": "browser_unavailable",
+    "attempted": 0,
+    "confirmedCards": 0,
+    "confirmedPrices": 0,
+    "unverifiedCount": 17,
+    "reason": "Встроенный браузер Codex недоступен в фоновом запуске."
+  }
 }
